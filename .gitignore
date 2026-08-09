@@ -1,0 +1,17 @@
+# Sensitive API keys & credentials
+n8n_config.json
+*.env
+*.key
+*.pem
+credentials*.json
+
+# Backups & Executions
+backups/
+workflows/*.json
+!workflows/.gitkeep
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
