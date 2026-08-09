@@ -1,0 +1,4 @@
+{
+  "base_url": "https://YOUR_SUBDOMAIN.app.n8n.cloud/api/v1",
+  "api_key": "YOUR_API_KEY_HERE"
+}

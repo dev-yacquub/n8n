@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: n8n
+    runtime: image
+    image:
+      url: docker.n8n.io/n8nio/n8n:latest
+    plan: free # or starter ($7/mo)
+    region: oregon # or frankfurt, singapore
+    envVars:
+      - key: PORT
+        value: 5678
+      - key: N8N_PORT
+        value: 5678
+      - key: N8N_PROTOCOL
+        value: https
+      - key: NODE_ENV
+        value: production
+      - key: GENERIC_TIMEZONE
+        value: UTC
+      - key: N8N_ENCRYPTION_KEY
+        generateValue: true
+      - key: DB_TYPE
+        value: postgresdb
+      - key: DB_POSTGRESDB_HOST
+        sync: false # Set host in dashboard (e.g. Supabase/Neon DB host)
+      - key: DB_POSTGRESDB_PORT
+        value: "5432"
+      - key: DB_POSTGRESDB_DATABASE
+        value: postgres
+      - key: DB_POSTGRESDB_USER
+        sync: false # Set DB user in dashboard
+      - key: DB_POSTGRESDB_PASSWORD
+        sync: false # Set DB password in dashboard
+      - key: DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED
+        value: "false"
+      - key: N8N_HOST
+        sync: false # Set your-app.onrender.com in dashboard
+      - key: WEBHOOK_URL
+        sync: false # Set https://your-app.onrender.com/ in dashboard
+      - key: EXECUTIONS_DATA_PRUNE
+        value: "true"
+      - key: EXECUTIONS_DATA_MAX_AGE
+        value: "168"

@@ -1,0 +1,57 @@
+services:
+  - type: web
+    name: n8n
+    runtime: image
+    image:
+      url: docker.n8n.io/n8nio/n8n:latest
+    plan: free # or starter
+    region: oregon # or frankfurt, singapore, etc.
+    envVars:
+      - key: PORT
+        value: 5678
+      - key: N8N_PORT
+        value: 5678
+      - key: N8N_PROTOCOL
+        value: https
+      - key: NODE_ENV
+        value: production
+      - key: GENERIC_TIMEZONE
+        value: UTC
+      - key: N8N_ENCRYPTION_KEY
+        generateValue: true
+      - key: DB_TYPE
+        value: postgresdb
+      - key: DB_POSTGRESDB_HOST
+        fromDatabase:
+          name: n8n-db
+          property: host
+      - key: DB_POSTGRESDB_PORT
+        fromDatabase:
+          name: n8n-db
+          property: port
+      - key: DB_POSTGRESDB_DATABASE
+        fromDatabase:
+          name: n8n-db
+          property: database
+      - key: DB_POSTGRESDB_USER
+        fromDatabase:
+          name: n8n-db
+          property: user
+      - key: DB_POSTGRESDB_PASSWORD
+        fromDatabase:
+          name: n8n-db
+          property: password
+      - key: N8N_HOST
+        sync: false # Set to your-app-name.onrender.com in Render dashboard
+      - key: WEBHOOK_URL
+        sync: false # Set to https://your-app-name.onrender.com/ in Render dashboard
+      - key: EXECUTIONS_DATA_PRUNE
+        value: "true"
+      - key: EXECUTIONS_DATA_MAX_AGE
+        value: "168" # Prune after 7 days to conserve DB space
+
+databases:
+  - name: n8n-db
+    plan: free # Note: Render free Postgres expires after 30 days. For permanent use, connect an external DB (e.g. Supabase, Neon) or upgrade DB plan.
+    databaseName: n8n
+    user: n8n
