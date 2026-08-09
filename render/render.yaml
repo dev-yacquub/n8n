@@ -17,8 +17,10 @@ services:
         value: production
       - key: GENERIC_TIMEZONE
         value: UTC
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=400"
       - key: N8N_ENCRYPTION_KEY
-        generateValue: true
+        value: n8n-render-secret-key-328b555-production
       - key: DB_TYPE
         value: postgresdb
       - key: DB_POSTGRESDB_HOST
