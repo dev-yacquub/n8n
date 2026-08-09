@@ -11,6 +11,10 @@ services:
         value: 5678
       - key: N8N_PORT
         value: 5678
+      - key: N8N_HOST
+        value: 0.0.0.0
+      - key: N8N_LISTEN_ADDRESS
+        value: 0.0.0.0
       - key: N8N_PROTOCOL
         value: https
       - key: NODE_ENV
@@ -18,7 +22,9 @@ services:
       - key: GENERIC_TIMEZONE
         value: UTC
       - key: NODE_OPTIONS
-        value: "--max-old-space-size=400" # Prevents exit code 134 (RAM OOM) on Render 512MB free tier
+        value: "--max-old-space-size=400"
+      - key: N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS
+        value: "false"
       - key: N8N_ENCRYPTION_KEY
         value: n8n-render-secret-key-328b555-production
       - key: DB_TYPE
