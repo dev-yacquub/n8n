@@ -11,6 +11,8 @@ services:
         value: 5678
       - key: N8N_PORT
         value: 5678
+      - key: N8N_HOST
+        value: 0.0.0.0
       - key: N8N_LISTEN_ADDRESS
         value: 0.0.0.0
       - key: N8N_PROTOCOL
