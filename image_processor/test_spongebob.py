@@ -1,6 +1,6 @@
 """
-Local test - 3D cartoon character with clean bottom text banner (perfect text wrapping)
-Run: python test_local.py
+Local test - 3D SpongeBob in Tuxedo with clean bottom banner card
+Run: python test_spongebob.py
 """
 import sys, os
 sys.path.insert(0, r"d:\zdiiv\vids\venv\Lib\site-packages")
@@ -14,7 +14,7 @@ import urllib.parse
 from PIL import Image, ImageDraw, ImageFont
 import requests as http_requests
 
-# ── Download fonts ──────────────────────────────────────────────────────────
+# ── Fonts ───────────────────────────────────────────────────────────────────
 FONT_DIR = r"d:\zdiiv\N8N\image_processor\fonts"
 os.makedirs(FONT_DIR, exist_ok=True)
 BOLD_PATH    = f"{FONT_DIR}/Montserrat-Bold.ttf"
@@ -25,38 +25,28 @@ for path, url in [
     (REGULAR_PATH, "https://github.com/JulietaUla/Montserrat/raw/master/fonts/ttf/Montserrat-Regular.ttf"),
 ]:
     if not os.path.exists(path):
-        print(f"Downloading {url}...")
         urllib.request.urlretrieve(url, path)
-        print("Saved.")
 
-# ── Banner layout generator ─────────────────────────────────────────────────
+# ── Banner layout ───────────────────────────────────────────────────────────
 def create_banner_post(img, quote, character, handle="@masculine.aura"):
-    """
-    Creates a clean Instagram card (1080x1320) with a white bottom banner.
-    The 3D character is 100% visible and completely un-obscured!
-    """
     img = img.convert("RGB")
-    W, H = img.size # 1080x1080
+    W, H = img.size
 
     BANNER_H = 240
-    TOTAL_H = H + BANNER_H # 1080 + 240 = 1320 (ideal Instagram portrait ratio)
+    TOTAL_H = H + BANNER_H
 
     canvas = Image.new("RGB", (W, TOTAL_H), (255, 255, 255))
     canvas.paste(img, (0, 0))
 
     draw = ImageDraw.Draw(canvas)
-
-    # Subtle top border line separating 3D image and text banner
     draw.line([(0, H), (W, H)], fill=(230, 230, 230), width=3)
 
-    # Fonts
     font_quote  = ImageFont.truetype(BOLD_PATH, 28)
     font_handle = ImageFont.truetype(REGULAR_PATH, 20)
 
     BLACK = (15, 15, 15)
     GRAY  = (110, 110, 110)
 
-    # Clean wrapped quote
     quote_text = quote.upper()
     wrapped = textwrap.wrap(quote_text, width=32)
 
@@ -78,22 +68,21 @@ def create_banner_post(img, quote, character, handle="@masculine.aura"):
 
     return canvas
 
-# ── Test run ──────────────────────────────────────────────────────────────────
-print("Downloading 3D Bugs Bunny in Tuxedo image from Pollinations...")
-prompt = "3D octane render 4k, Bugs Bunny wearing an elegant black tuxedo suit and black tie holding martini glass, dark solid black studio background, cinematic lighting, dapper masculine aura, high detail 3d cartoon character, masterpiece"
-url = "https://image.pollinations.ai/prompt/" + urllib.parse.quote(prompt) + "?width=1080&height=1080&nologo=true&seed=999&model=flux"
+# ── Test SpongeBob ──────────────────────────────────────────────────────────
+print("Downloading 3D SpongeBob in Tuxedo image from Pollinations...")
+prompt = "3D octane render 4k, SpongeBob SquarePants wearing stylish black sunglasses and tailored tuxedo suit with red bow tie, solid black studio background, dramatic studio lighting, dapper masculine aura, high detail 3d character render, masterpiece"
+url = "https://image.pollinations.ai/prompt/" + urllib.parse.quote(prompt) + "?width=1080&height=1080&nologo=true&seed=777&model=flux"
 resp = http_requests.get(url, timeout=60)
 print(f"Downloaded: {resp.status_code} | {len(resp.content)} bytes")
 
 img = Image.open(io.BytesIO(resp.content))
 result = create_banner_post(
     img,
-    quote="What's up, doc? I just play by my own rules.",
-    character="Bugs Bunny",
+    quote="I'm not just ready, I'm born ready.",
+    character="SpongeBob SquarePants",
     handle="@masculine.aura"
 )
 
-out_path = r"d:\zdiiv\N8N\image_processor\test_output.jpg"
+out_path = r"d:\zdiiv\N8N\image_processor\spongebob_output.jpg"
 result.save(out_path, format="JPEG", quality=95)
 print(f"\nSaved to: {out_path}")
-print("Open file to preview!")
