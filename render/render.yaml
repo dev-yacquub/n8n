@@ -22,7 +22,15 @@ services:
       - key: GENERIC_TIMEZONE
         value: UTC
       - key: NODE_OPTIONS
-        value: "--max-old-space-size=400"
+        value: "--max-old-space-size=320"
+      - key: N8N_RUNNERS_ENABLED
+        value: "false"
+      - key: N8N_VERSION_NOTIFICATIONS_ENABLED
+        value: "false"
+      - key: N8N_DIAGNOSTICS_ENABLED
+        value: "false"
+      - key: WEBHOOK_URL
+        value: https://n8n-5yi2.onrender.com/
       - key: N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS
         value: "false"
       - key: N8N_ENCRYPTION_KEY
@@ -53,6 +61,8 @@ services:
         value: "true"
       - key: EXECUTIONS_DATA_MAX_AGE
         value: "168"
+      - key: EXECUTIONS_DATA_PRUNE_MAX_COUNT
+        value: "10000"
 
 databases:
   - name: n8n-db
