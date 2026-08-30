@@ -57,6 +57,10 @@ services:
         fromDatabase:
           name: n8n-db
           property: password
+      - key: DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED
+        value: "false"
+      - key: DB_POSTGRESDB_CONNECTION_TIMEOUT
+        value: "60000"
       - key: EXECUTIONS_DATA_PRUNE
         value: "true"
       - key: EXECUTIONS_DATA_MAX_AGE
