@@ -88,17 +88,16 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 
 
 def start_health_server():
-    port_str = os.getenv("PORT")
-    if not port_str:
-        return
+    port_str = os.getenv("PORT", "10000").strip()
+    port = int(port_str) if port_str.isdigit() else 10000
     try:
-        port = int(port_str)
+        HTTPServer.allow_reuse_address = True
         server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        print(f"📡 Cloud Health Check listening on 0.0.0.0:{port}")
+        print(f"📡 Cloud Health Check & QR Server listening on 0.0.0.0:{port}", flush=True)
     except Exception as e:
-        print(f"⚠️ Could not start health check server: {e}")
+        print(f"⚠️ Could not start health check server: {e}", flush=True)
 
 
 def main():

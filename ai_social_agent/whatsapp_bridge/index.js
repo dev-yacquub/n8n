@@ -8,7 +8,7 @@ const fs = require('fs');
 const app = express();
 app.use(express.json());
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.WHATSAPP_PORT || process.env.BRIDGE_PORT || 3001;
 const AUTH_DIR = path.join(__dirname, 'auth_info_baileys');
 
 let sock = null;

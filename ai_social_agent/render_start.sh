@@ -7,10 +7,10 @@ export PATH="$PWD/$NODE_DIR/bin:$PATH"
 
 echo "=== Starting WhatsApp Bridge (port 3001) ==="
 cd ai_social_agent/whatsapp_bridge
-node index.js &
+BRIDGE_PORT=3001 node index.js &
 cd ../..
 
 sleep 2
 
 echo "=== Starting SocialCommander Python Agent (port ${PORT:-10000}) ==="
-exec python ai_social_agent/main.py
+exec python -u ai_social_agent/main.py
