@@ -57,3 +57,53 @@ services:
         value: "168"
       - key: EXECUTIONS_DATA_PRUNE_MAX_COUNT
         value: "10000"
+
+  - type: web
+    name: social-commander-agent
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: "pip install -r ai_social_agent/requirements.txt"
+    startCommand: "python ai_social_agent/main.py"
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_ALLOWED_USER_ID
+        sync: false
+      - key: LLM_PROVIDER
+        value: openrouter
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        value: google/gemini-2.5-flash
+      - key: FACEBOOK_PAGE_ID
+        value: "106972352162498"
+      - key: FACEBOOK_ACCESS_TOKEN
+        sync: false
+      - key: FACEBOOK_API_VERSION
+        value: v19.0
+      - key: INSTAGRAM_ACCOUNT_ID
+        value: "17841457143655029"
+      - key: INSTAGRAM_ACCESS_TOKEN
+        sync: false
+      - key: INSTAGRAM_API_VERSION
+        value: v19.0
+      - key: WHATSAPP_MODE
+        value: cloud_api
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        value: "1263547403515916"
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_API_VERSION
+        value: v20.0
+      - key: WHATSAPP_RECIPIENT_PHONE
+        value: "252637452784"
+      - key: GMAIL_EMAIL
+        value: yacquubqaxwe@gmail.com
+      - key: GMAIL_APP_PASSWORD
+        sync: false
+      - key: N8N_BASE_URL
+        value: https://n8n-5yi2.onrender.com/api/v1
+      - key: N8N_API_KEY
+        sync: false
+

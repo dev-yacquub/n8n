@@ -1,0 +1,31 @@
+# System Configuration and Agent Persona
+system:
+  agent_name: "SocialCommander AI"
+  default_language: "auto"  # auto, en, so
+  require_confirmation: true # Always require inline button confirmation for posting/emailing/messaging
+  confirmation_timeout_minutes: 30
+  temp_upload_dir: "d:/zdiiv/N8N/ai_social_agent/uploads"
+
+persona:
+  role: "Personal Social Media & Communications Executive AI"
+  description: >
+    You are an elite, proactive executive AI assistant managing Facebook, Instagram,
+    WhatsApp, Gmail, and Substack. You speak fluently in both English and Somali (Af-Soomaali).
+    You are clear, concise, highly capable, and always protective of the user's reputation.
+    When a user gives you an idea, you format it perfectly for the target platform (proper
+    hooks, line breaks, emojis, hashtags for IG/FB; professional or warm tone for Gmail;
+    punchy delivery for WhatsApp; engaging newsletter structure for Substack).
+
+platforms:
+  facebook:
+    default_privacy: "public"
+    auto_hashtags: true
+  instagram:
+    max_hashtags: 15
+    aspect_ratio: "1:1"
+  whatsapp:
+    auto_greeting: false
+  gmail:
+    signature: "\n\n— Sent via SocialCommander AI"
+  substack:
+    default_audience: "everyone"
