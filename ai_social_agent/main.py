@@ -34,12 +34,54 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 
+import urllib.request
+import urllib.error
+
+
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(b'{"status":"ok","service":"SocialCommander AI Agent"}')
+        if self.path == "/qr":
+            try:
+                req = urllib.request.Request("http://127.0.0.1:3001/qr")
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    content = response.read()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(content)
+            except Exception as e:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                html = f"""
+                <html>
+                    <head><title>WhatsApp Bridge Starting</title><meta http-equiv="refresh" content="3"></head>
+                    <body style="font-family: sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; background:#0f172a; color:#f8fafc;">
+                        <h2>WhatsApp Bridge is starting up...</h2>
+                        <p style="color:#94a3b8;">Auto-refreshing in 3 seconds...</p>
+                    </body>
+                </html>
+                """
+                self.wfile.write(html.encode("utf-8"))
+        elif self.path == "/status":
+            try:
+                req = urllib.request.Request("http://127.0.0.1:3001/status")
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    content = response.read()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(content)
+            except Exception as e:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"success": false, "connected": false, "error": "Bridge offline"}')
+        else:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"status":"ok","service":"SocialCommander AI Agent"}')
 
     def log_message(self, format, *args):
         pass  # Suppress access logs

@@ -60,11 +60,11 @@ services:
 
   - type: web
     name: social-commander-agent
-    runtime: python
+    runtime: docker
+    dockerfilePath: ./ai_social_agent/Dockerfile
+    dockerContext: .
     plan: free
     region: oregon
-    buildCommand: "pip install -r ai_social_agent/requirements.txt"
-    startCommand: "python ai_social_agent/main.py"
     envVars:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
@@ -89,7 +89,9 @@ services:
       - key: INSTAGRAM_API_VERSION
         value: v19.0
       - key: WHATSAPP_MODE
-        value: cloud_api
+        value: linked_device
+      - key: WHATSAPP_BRIDGE_URL
+        value: http://127.0.0.1:3001
       - key: WHATSAPP_PHONE_NUMBER_ID
         value: "1263547403515916"
       - key: WHATSAPP_ACCESS_TOKEN
