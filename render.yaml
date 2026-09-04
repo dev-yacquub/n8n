@@ -60,11 +60,11 @@ services:
 
   - type: web
     name: social-commander-agent
-    runtime: docker
-    dockerfilePath: ./ai_social_agent/Dockerfile
-    dockerContext: .
+    runtime: python
     plan: free
     region: oregon
+    buildCommand: "bash ai_social_agent/render_build.sh"
+    startCommand: "bash ai_social_agent/render_start.sh"
     envVars:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
