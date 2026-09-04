@@ -1,5 +1,4 @@
 const express = require('express');
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const qrcodeTerminal = require('qrcode-terminal');
 const QRCode = require('qrcode');
@@ -18,7 +17,20 @@ let currentQRDataUrl = null;
 let isConnected = false;
 let connectedUser = null;
 
+let makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion;
+
+async function loadBaileys() {
+    const b = await import('@whiskeysockets/baileys');
+    makeWASocket = b.default || b.makeWASocket;
+    DisconnectReason = b.DisconnectReason;
+    useMultiFileAuthState = b.useMultiFileAuthState;
+    fetchLatestBaileysVersion = b.fetchLatestBaileysVersion;
+}
+
 async function connectToWhatsApp() {
+    if (!makeWASocket) {
+        await loadBaileys();
+    }
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
     const { version, isLatest } = await fetchLatestBaileysVersion();
     
