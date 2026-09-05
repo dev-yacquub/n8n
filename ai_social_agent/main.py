@@ -77,6 +77,30 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(b'{"success": false, "connected": false, "error": "Bridge offline"}')
+        elif self.path.startswith("/media/"):
+            clean_path = self.path.split("?")[0]
+            filename = os.path.basename(clean_path)
+            file_path = os.path.join(str(BASE_DIR), "uploads", filename)
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, "rb") as f:
+                        content = f.read()
+                    self.send_response(200)
+                    if filename.lower().endswith(".png"):
+                        self.send_header("Content-Type", "image/png")
+                    elif filename.lower().endswith((".jpg", ".jpeg")):
+                        self.send_header("Content-Type", "image/jpeg")
+                    else:
+                        self.send_header("Content-Type", "application/octet-stream")
+                    self.send_header("Content-Length", str(len(content)))
+                    self.end_headers()
+                    self.wfile.write(content)
+                except Exception:
+                    self.send_response(500)
+                    self.end_headers()
+            else:
+                self.send_response(404)
+                self.end_headers()
         else:
             self.send_response(200)
             self.send_header("Content-Type", "application/json")

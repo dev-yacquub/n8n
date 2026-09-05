@@ -111,21 +111,33 @@ class ConfirmationManager:
             # 1. Facebook
             if platform == "facebook":
                 if atype == "post_text":
-                    result = await self.fb.post_text(payload.get("message", ""))
+                    result = await self.fb.post_text(payload.get("message") or payload.get("caption", ""))
                 elif atype == "post_photo":
+                    img = action.media_path or action.media_url or payload.get("image_url", "")
+                    caption = payload.get("caption") or payload.get("message", "")
                     result = await self.fb.post_photo(
-                        image_url=action.media_url or payload.get("image_url", ""),
-                        caption=payload.get("caption", "")
+                        image_url=img,
+                        caption=caption
                     )
+                    # Cross-post to Instagram if flagged
+                    if payload.get("cross_post_ig") and self.ig.is_configured():
+                        ig_img = action.media_url or img
+                        ig_res = await self.ig.post_photo(image_url=ig_img, caption=caption)
+                        if ig_res.success:
+                            result.message += f"\n📸 Instagram: {ig_res.message}"
+                        else:
+                            result.message += f"\n⚠️ Instagram: {ig_res.error or ig_res.message}"
                 else:
                     result = ActionResult(success=False, platform="facebook", action=atype, message=f"Unknown action: {atype}")
 
             # 2. Instagram
             elif platform == "instagram":
                 if atype == "post_photo":
+                    img = action.media_url or action.media_path or payload.get("image_url", "")
+                    caption = payload.get("caption") or payload.get("message", "")
                     result = await self.ig.post_photo(
-                        image_url=action.media_url or payload.get("image_url", ""),
-                        caption=payload.get("caption", "")
+                        image_url=img,
+                        caption=caption
                     )
                 else:
                     result = ActionResult(success=False, platform="instagram", action=atype, message=f"Unknown action: {atype}")
@@ -133,33 +145,40 @@ class ConfirmationManager:
             # 3. WhatsApp
             elif platform == "whatsapp":
                 if atype == "send_message":
+                    recipient = payload.get("recipient") or payload.get("recipient_phone") or payload.get("to", "")
+                    msg_text = payload.get("message") or payload.get("body") or payload.get("text", "")
                     result = await self.wa.send_message(
-                        recipient_phone=payload.get("recipient", ""),
-                        message=payload.get("message", "")
+                        recipient_phone=recipient,
+                        message=msg_text
                     )
                 elif atype == "send_image":
+                    recipient = payload.get("recipient") or payload.get("recipient_phone") or payload.get("to", "")
+                    img = action.media_url or action.media_path or payload.get("image_url", "")
                     result = await self.wa.send_image(
-                        recipient_phone=payload.get("recipient", ""),
-                        image_url=action.media_url or payload.get("image_url", ""),
-                        caption=payload.get("caption")
+                        recipient_phone=recipient,
+                        image_url=img,
+                        caption=payload.get("caption") or payload.get("message")
                     )
                 else:
                     result = ActionResult(success=False, platform="whatsapp", action=atype, message=f"Unknown action: {atype}")
 
             # 4. Gmail
             elif platform == "gmail":
+                to_addr = payload.get("to") or payload.get("recipient") or payload.get("email", "")
+                subj = payload.get("subject") or "No Subject"
+                body_text = payload.get("body") or payload.get("message") or payload.get("text", "")
                 if atype == "send_email":
                     result = await self.gmail.send_email(
-                        to=payload.get("to", ""),
-                        subject=payload.get("subject", ""),
-                        body=payload.get("body", ""),
+                        to=to_addr,
+                        subject=subj,
+                        body=body_text,
                         html_body=payload.get("html_body")
                     )
                 elif atype == "create_draft":
                     result = await self.gmail.create_draft(
-                        to=payload.get("to", ""),
-                        subject=payload.get("subject", ""),
-                        body=payload.get("body", "")
+                        to=to_addr,
+                        subject=subj,
+                        body=body_text
                     )
                 else:
                     result = ActionResult(success=False, platform="gmail", action=atype, message=f"Unknown action: {atype}")

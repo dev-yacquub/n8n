@@ -67,7 +67,11 @@ class Config:
             "ai_brain": bool(cls.OPENROUTER_API_KEY or cls.GEMINI_API_KEY),
             "facebook": bool(cls.FACEBOOK_PAGE_ID and cls.FACEBOOK_ACCESS_TOKEN),
             "instagram": bool(cls.INSTAGRAM_ACCOUNT_ID and cls.INSTAGRAM_ACCESS_TOKEN),
-            "whatsapp": bool(cls.WHATSAPP_PHONE_NUMBER_ID and cls.WHATSAPP_ACCESS_TOKEN),
+            "whatsapp": (
+                bool(cls.WHATSAPP_BRIDGE_URL)
+                if cls.WHATSAPP_MODE == "linked_device"
+                else bool(cls.WHATSAPP_PHONE_NUMBER_ID and cls.WHATSAPP_ACCESS_TOKEN)
+            ),
             "gmail": bool(cls.GMAIL_EMAIL and (cls.GMAIL_APP_PASSWORD or cls.GMAIL_CLIENT_SECRET_FILE)),
             "substack": bool(cls.SUBSTACK_SUBDOMAIN and cls.SUBSTACK_COOKIE_SID),
             "n8n": bool(cls.N8N_BASE_URL and cls.N8N_API_KEY)

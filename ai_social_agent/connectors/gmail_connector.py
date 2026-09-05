@@ -16,7 +16,10 @@ from concurrent.futures import ThreadPoolExecutor
 from .base import BaseConnector, ActionResult
 from ..config.config import config
 
-executor = ThreadPoolExecutor(max_workers=3)
+import logging
+
+logger = logging.getLogger("SocialCommander.Gmail")
+executor = ThreadPoolExecutor(max_workers=5)
 
 
 def _decode_mime_words(s: str) -> str:
@@ -44,7 +47,7 @@ class GmailConnector(BaseConnector):
 
     def _sync_test_connection(self) -> ActionResult:
         try:
-            with imaplib.IMAP4_SSL("imap.gmail.com") as mail:
+            with imaplib.IMAP4_SSL("imap.gmail.com", timeout=15) as mail:
                 mail.login(self.email_address, self.app_password)
                 mail.select("INBOX")
                 status, data = mail.search(None, "UNSEEN")
@@ -75,11 +78,20 @@ class GmailConnector(BaseConnector):
                 error="UNCONFIGURED"
             )
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(executor, self._sync_test_connection)
+        try:
+            return await asyncio.wait_for(loop.run_in_executor(executor, self._sync_test_connection), timeout=25.0)
+        except asyncio.TimeoutError:
+            return ActionResult(
+                success=False,
+                platform="gmail",
+                action="test_connection",
+                message="Gmail connection check timed out (15s).",
+                error="TIMEOUT"
+            )
 
     def _sync_list_unread(self, max_results: int = 5) -> ActionResult:
         try:
-            with imaplib.IMAP4_SSL("imap.gmail.com") as mail:
+            with imaplib.IMAP4_SSL("imap.gmail.com", timeout=15) as mail:
                 mail.login(self.email_address, self.app_password)
                 mail.select("INBOX")
                 status, data = mail.search(None, "UNSEEN")
@@ -155,30 +167,82 @@ class GmailConnector(BaseConnector):
                 error="UNCONFIGURED"
             )
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(executor, self._sync_list_unread, max_results)
+        try:
+            return await asyncio.wait_for(loop.run_in_executor(executor, self._sync_list_unread, max_results), timeout=30.0)
+        except asyncio.TimeoutError:
+            return ActionResult(
+                success=False,
+                platform="gmail",
+                action="list_unread",
+                message="Listing unread emails timed out.",
+                error="TIMEOUT"
+            )
 
     def _sync_send_email(self, to: str, subject: str, body: str, html_body: Optional[str] = None) -> ActionResult:
         try:
+            if not to or not to.strip():
+                return ActionResult(
+                    success=False,
+                    platform="gmail",
+                    action="send_email",
+                    message="Recipient email address is missing.",
+                    error="MISSING_RECIPIENT"
+                )
+
             msg = EmailMessage()
-            msg["Subject"] = subject
+            msg["Subject"] = subject or "No Subject"
             msg["From"] = self.email_address
-            msg["To"] = to
-            msg.set_content(body)
+            msg["To"] = to.strip()
+            msg.set_content(body or "")
 
             if html_body:
                 msg.add_alternative(html_body, subtype="html")
 
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-                smtp.login(self.email_address, self.app_password)
-                smtp.send_message(msg)
+            # Try Port 587 with STARTTLS first (standard for cloud environments like Render)
+            sent = False
+            last_error = None
 
-            return ActionResult(
-                success=True,
-                platform="gmail",
-                action="send_email",
-                message=f"Email successfully sent to {to}!",
-                data={"to": to, "subject": subject}
-            )
+            try:
+                with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as smtp:
+                    smtp.ehlo()
+                    smtp.starttls()
+                    smtp.ehlo()
+                    smtp.login(self.email_address, self.app_password)
+                    smtp.send_message(msg)
+                    sent = True
+                    logger.info(f"Email sent successfully to {to} via smtp.gmail.com:587 (STARTTLS)")
+            except Exception as e587:
+                last_error = e587
+                logger.warning(f"SMTP 587 failed ({e587}), falling back to 465 (SSL)...")
+
+            # Fallback to Port 465 with SSL if 587 was blocked
+            if not sent:
+                try:
+                    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as smtp:
+                        smtp.login(self.email_address, self.app_password)
+                        smtp.send_message(msg)
+                        sent = True
+                        logger.info(f"Email sent successfully to {to} via smtp.gmail.com:465 (SSL)")
+                except Exception as e465:
+                    last_error = e465
+                    logger.error(f"SMTP 465 also failed: {e465}")
+
+            if sent:
+                return ActionResult(
+                    success=True,
+                    platform="gmail",
+                    action="send_email",
+                    message=f"Email successfully sent to {to}!",
+                    data={"to": to, "subject": subject}
+                )
+            else:
+                return ActionResult(
+                    success=False,
+                    platform="gmail",
+                    action="send_email",
+                    message=f"Failed to send email to {to}.",
+                    error=str(last_error)
+                )
         except Exception as e:
             return ActionResult(
                 success=False,
@@ -189,7 +253,7 @@ class GmailConnector(BaseConnector):
             )
 
     async def send_email(self, to: str, subject: str, body: str, html_body: Optional[str] = None) -> ActionResult:
-        """Sends an email via Gmail SMTP."""
+        """Sends an email via Gmail SMTP with dual-port fallback."""
         if not self.is_configured():
             return ActionResult(
                 success=False,
@@ -199,7 +263,19 @@ class GmailConnector(BaseConnector):
                 error="UNCONFIGURED"
             )
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(executor, self._sync_send_email, to, subject, body, html_body)
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(executor, self._sync_send_email, to, subject, body, html_body),
+                timeout=35.0
+            )
+        except asyncio.TimeoutError:
+            return ActionResult(
+                success=False,
+                platform="gmail",
+                action="send_email",
+                message=f"Email send to {to} timed out after 35 seconds.",
+                error="TIMEOUT"
+            )
 
     def _sync_create_draft(self, to: str, subject: str, body: str) -> ActionResult:
         """Appends a message to the Gmail [Gmail]/Drafts folder."""
@@ -210,9 +286,8 @@ class GmailConnector(BaseConnector):
             msg["To"] = to
             msg.set_content(body)
 
-            with imaplib.IMAP4_SSL("imap.gmail.com") as mail:
+            with imaplib.IMAP4_SSL("imap.gmail.com", timeout=15) as mail:
                 mail.login(self.email_address, self.app_password)
-                # Gmail drafts folder is typically "[Gmail]/Drafts"
                 mail.append('"[Gmail]/Drafts"', "", imaplib.Time2Internaldate(email.utils.parsedate_to_datetime(email.utils.formatdate())), msg.as_bytes())
 
             return ActionResult(
@@ -242,4 +317,16 @@ class GmailConnector(BaseConnector):
                 error="UNCONFIGURED"
             )
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(executor, self._sync_create_draft, to, subject, body)
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(executor, self._sync_create_draft, to, subject, body),
+                timeout=25.0
+            )
+        except asyncio.TimeoutError:
+            return ActionResult(
+                success=False,
+                platform="gmail",
+                action="create_draft",
+                message="Creating Gmail draft timed out.",
+                error="TIMEOUT"
+            )
