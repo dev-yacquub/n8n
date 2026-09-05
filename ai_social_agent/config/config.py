@@ -46,10 +46,12 @@ class Config:
     WHATSAPP_API_VERSION: str = os.getenv("WHATSAPP_API_VERSION", "v19.0").strip()
     WHATSAPP_RECIPIENT_PHONE: str = os.getenv("WHATSAPP_RECIPIENT_PHONE", "").strip()
 
-    # --- Gmail ---
+    # --- Gmail & Email Sending ---
     GMAIL_EMAIL: str = os.getenv("GMAIL_EMAIL", "").strip()
     GMAIL_APP_PASSWORD: str = os.getenv("GMAIL_APP_PASSWORD", "").strip()
     GMAIL_CLIENT_SECRET_FILE: str = os.getenv("GMAIL_CLIENT_SECRET_FILE", "").strip()
+    RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "").strip()
+    EMAIL_FROM: str = os.getenv("EMAIL_FROM", "").strip()
 
     # --- Substack ---
     SUBSTACK_SUBDOMAIN: str = os.getenv("SUBSTACK_SUBDOMAIN", "").strip()

@@ -7,6 +7,7 @@ Uses secure IMAP/SMTP with App Password (zero-overhead) with support for Google 
 import imaplib
 import smtplib
 import email
+import httpx
 from email.message import EmailMessage
 from email.header import decode_header
 from typing import List, Dict, Any, Optional
@@ -43,7 +44,7 @@ class GmailConnector(BaseConnector):
         self.app_password = config.GMAIL_APP_PASSWORD.replace(" ", "")
 
     def is_configured(self) -> bool:
-        return bool(self.email_address and self.app_password)
+        return bool((self.email_address and self.app_password) or config.RESEND_API_KEY)
 
     def _sync_test_connection(self) -> ActionResult:
         try:
@@ -236,30 +237,89 @@ class GmailConnector(BaseConnector):
                     data={"to": to, "subject": subject}
                 )
             else:
+                err_str = str(last_error)
+                is_port_block = any(k in err_str.lower() for k in ["timed out", "timeout", "refused", "111", "11001", "network is unreachable"])
+                if is_port_block:
+                    msg = (
+                        f"⚠️ Outbound SMTP ports (587/465) are blocked on Render Free Tier.\n\n"
+                        f"💡 Quick Fix: Add RESEND_API_KEY to your Render Environment Variables (free at resend.com - takes 1 min, 3,000 free emails/month)."
+                    )
+                else:
+                    msg = f"Failed to send email to {to}: {err_str}"
+
                 return ActionResult(
                     success=False,
                     platform="gmail",
                     action="send_email",
-                    message=f"Failed to send email to {to}.",
-                    error=str(last_error)
+                    message=msg,
+                    error=err_str
                 )
         except Exception as e:
             return ActionResult(
                 success=False,
                 platform="gmail",
                 action="send_email",
-                message=f"Failed to send email to {to}.",
+                message=f"Failed to send email to {to}: {str(e)}",
+                error=str(e)
+            )
+
+    async def _send_via_resend(self, to: str, subject: str, body: str, html_body: Optional[str] = None) -> ActionResult:
+        """Sends an email via Resend HTTP REST API over port 443 (immune to cloud SMTP port blocking)."""
+        try:
+            from_addr = config.EMAIL_FROM or "SocialCommander <onboarding@resend.dev>"
+            headers = {
+                "Authorization": f"Bearer {config.RESEND_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "from": from_addr,
+                "to": [to.strip()],
+                "subject": subject or "No Subject",
+                "text": body or "",
+                "html": html_body or (body.replace("\n", "<br>") if body else "")
+            }
+            async with httpx.AsyncClient(timeout=25.0) as client:
+                res = await client.post("https://api.resend.com/emails", headers=headers, json=payload)
+                data = res.json()
+                if res.status_code in (200, 201) and "id" in data:
+                    email_id = data["id"]
+                    logger.info(f"Email successfully sent to {to} via Resend HTTP API (ID: {email_id})")
+                    return ActionResult(
+                        success=True,
+                        platform="gmail",
+                        action="send_email",
+                        message=f"Email successfully sent to {to}! (via Resend HTTPS API)",
+                        data={"to": to, "subject": subject, "id": email_id}
+                    )
+                else:
+                    err_msg = data.get("message", res.text)
+                    return ActionResult(
+                        success=False,
+                        platform="gmail",
+                        action="send_email",
+                        message=f"Failed to send email via Resend: {err_msg}",
+                        error=err_msg
+                    )
+        except Exception as e:
+            return ActionResult(
+                success=False,
+                platform="gmail",
+                action="send_email",
+                message=f"Exception sending via Resend: {str(e)}",
                 error=str(e)
             )
 
     async def send_email(self, to: str, subject: str, body: str, html_body: Optional[str] = None) -> ActionResult:
-        """Sends an email via Gmail SMTP with dual-port fallback."""
+        """Sends an email via Resend HTTP API (if configured) or Gmail SMTP with dual-port fallback."""
+        if config.RESEND_API_KEY:
+            return await self._send_via_resend(to, subject, body, html_body)
+
         if not self.is_configured():
             return ActionResult(
                 success=False,
                 platform="gmail",
                 action="send_email",
-                message="Gmail credentials not configured.",
+                message="Gmail credentials or RESEND_API_KEY not configured.",
                 error="UNCONFIGURED"
             )
         loop = asyncio.get_running_loop()
@@ -273,8 +333,11 @@ class GmailConnector(BaseConnector):
                 success=False,
                 platform="gmail",
                 action="send_email",
-                message=f"Email send to {to} timed out after 35 seconds.",
-                error="TIMEOUT"
+                message=(
+                    f"⚠️ Outbound SMTP ports (587/465) timed out (blocked on Render Free Tier).\n\n"
+                    f"💡 Quick Fix: Add RESEND_API_KEY in your Render Environment Variables (free at resend.com - takes 1 min, 3,000 free emails/month)."
+                ),
+                error="RENDER_PORT_BLOCKED"
             )
 
     def _sync_create_draft(self, to: str, subject: str, body: str) -> ActionResult:

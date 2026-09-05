@@ -266,3 +266,64 @@ class FacebookConnector(BaseConnector):
                 message="Failed to fetch Facebook posts.",
                 error=str(e)
             )
+
+    async def upload_unpublished_photo(self, image_url_or_path: str) -> Optional[str]:
+        """
+        Uploads an image to Facebook Page with published=false to obtain an official,
+        high-speed Meta CDN URL (scontent.xx.fbcdn.net).
+        This guarantees Instagram container ingest never fails with media type errors.
+        """
+        if not self.is_configured() or not image_url_or_path:
+            return None
+
+        image_bytes = None
+
+        # 1. Local file on disk
+        if os.path.exists(image_url_or_path):
+            try:
+                with open(image_url_or_path, "rb") as f:
+                    image_bytes = f.read()
+                logger.info(f"Loaded local image ({len(image_bytes)} bytes) for Meta CDN generation")
+            except Exception as e:
+                logger.warning(f"Error reading local file {image_url_or_path}: {e}")
+
+        # 2. Remote URL (including Telegram bot URLs)
+        if not image_bytes and (image_url_or_path.startswith("http://") or image_url_or_path.startswith("https://")):
+            try:
+                async with httpx.AsyncClient(timeout=25.0) as dl_client:
+                    r = await dl_client.get(image_url_or_path)
+                    if r.status_code == 200 and len(r.content) > 0:
+                        image_bytes = r.content
+                        logger.info(f"Downloaded image ({len(image_bytes)} bytes) for Meta CDN generation")
+            except Exception as e:
+                logger.warning(f"Error downloading image from {image_url_or_path}: {e}")
+
+        if not image_bytes:
+            logger.warning(f"Could not obtain image bytes from source: {image_url_or_path[:60]}")
+            return None
+
+        try:
+            async with httpx.AsyncClient(timeout=40.0) as client:
+                url = f"{self.base_url}/{self.page_id}/photos"
+                files = {"source": ("meta_cdn_temp.jpg", image_bytes, "image/jpeg")}
+                data = {"published": "false", "access_token": self.access_token}
+                res = await client.post(url, files=files, data=data)
+                resp_json = res.json()
+
+                if res.status_code == 200 and "id" in resp_json:
+                    photo_id = resp_json["id"]
+                    # Query Meta CDN URL
+                    query_url = f"{self.base_url}/{photo_id}?fields=images&access_token={self.access_token}"
+                    q_res = await client.get(query_url)
+                    if q_res.status_code == 200:
+                        images = q_res.json().get("images", [])
+                        if images and "source" in images[0]:
+                            cdn_url = images[0]["source"]
+                            logger.info(f"Successfully generated Meta CDN URL for Instagram: {cdn_url[:60]}...")
+                            return cdn_url
+                else:
+                    logger.warning(f"Meta photo upload returned error: {res.text}")
+        except Exception as e:
+            logger.warning(f"Exception creating Meta CDN URL: {e}")
+
+        return None

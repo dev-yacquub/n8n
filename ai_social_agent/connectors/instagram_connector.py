@@ -5,10 +5,13 @@ Uses the two-step Instagram Container Publishing workflow.
 """
 
 import asyncio
+import logging
 import httpx
 from typing import Optional, Dict, Any, List
 from .base import BaseConnector, ActionResult
 from ..config.config import config
+
+logger = logging.getLogger("SocialCommander.Instagram")
 
 
 class InstagramConnector(BaseConnector):
@@ -74,6 +77,7 @@ class InstagramConnector(BaseConnector):
     async def post_photo(self, image_url: str, caption: str) -> ActionResult:
         """
         Publishes a single photo to Instagram Business Account:
+        Step 0: Automatically bridge local file/Telegram/web image to Meta CDN URL (immune to media type errors)
         Step 1: Create media container
         Step 2: Await readiness
         Step 3: Publish container
@@ -87,12 +91,29 @@ class InstagramConnector(BaseConnector):
                 error="UNCONFIGURED"
             )
 
+        # Step 0: Ensure image_url is a direct, accessible Meta CDN URL (scontent.xx.fbcdn.net)
+        target_url = image_url
+        if not target_url or not ("fbcdn.net" in target_url or "cdninstagram.com" in target_url):
+            try:
+                from .facebook_connector import FacebookConnector
+                fb = FacebookConnector()
+                if fb.is_configured():
+                    logger.info(f"Converting image source to official Meta CDN URL via Facebook Bridge...")
+                    cdn_url = await fb.upload_unpublished_photo(target_url)
+                    if cdn_url:
+                        target_url = cdn_url
+                        logger.info(f"Acquired Meta CDN URL: {target_url[:60]}...")
+                    else:
+                        logger.warning(f"Could not convert to Meta CDN URL, falling back to direct URL: {target_url}")
+            except Exception as e:
+                logger.warning(f"Error bridging to Meta CDN: {e}")
+
         try:
             async with httpx.AsyncClient(timeout=45.0) as client:
                 # Step 1: Create media container
                 container_url = f"{self.base_url}/{self.account_id}/media"
                 container_params = {
-                    "image_url": image_url,
+                    "image_url": target_url,
                     "caption": caption,
                     "access_token": self.access_token
                 }
@@ -100,13 +121,16 @@ class InstagramConnector(BaseConnector):
                 data1 = res1.json()
 
                 if res1.status_code != 200 or "id" not in data1:
-                    err_msg = data1.get("error", {}).get("message", res1.text)
+                    err_info = data1.get("error", {})
+                    err_msg = err_info.get("message", res1.text)
+                    err_code = err_info.get("code", res1.status_code)
+                    err_subcode = err_info.get("error_subcode", "")
                     return ActionResult(
                         success=False,
                         platform="instagram",
                         action="post_photo",
-                        message="Failed to create Instagram media container.",
-                        error=err_msg
+                        message=f"Failed to create Instagram media container: {err_msg}",
+                        error=f"[{err_code}:{err_subcode}] {err_msg}"
                     )
 
                 creation_id = data1["id"]
