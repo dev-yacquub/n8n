@@ -149,10 +149,24 @@ class FacebookConnector(BaseConnector):
             except Exception as e:
                 logger.warning(f"Failed to read local file {image_url}: {e}")
 
-        # 2. If not local file, check if it's an HTTP/HTTPS URL and download bytes
+        # 2. Check local UPLOADS_DIR if a /media/ URL or filename was passed
+        if not image_bytes and image_url and ("/media/" in image_url or not image_url.startswith("http")):
+            clean_name = os.path.basename(image_url.split("?")[0])
+            for check_dir in [config.UPLOADS_DIR, config.BASE_DIR / "uploads", Path(os.getcwd()) / "uploads"]:
+                cand = check_dir / clean_name
+                if cand.exists() and cand.is_file():
+                    try:
+                        with open(cand, "rb") as f:
+                            image_bytes = f.read()
+                        logger.info(f"Loaded image from local uploads dir {cand} ({len(image_bytes)} bytes)")
+                        break
+                    except Exception as e:
+                        logger.warning(f"Error reading local candidate {cand}: {e}")
+
+        # 3. If not local file, check if it's an HTTP/HTTPS URL and download bytes (follow redirects)
         if not image_bytes and image_url and (image_url.startswith("http://") or image_url.startswith("https://")):
             try:
-                async with httpx.AsyncClient(timeout=25.0) as dl_client:
+                async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as dl_client:
                     img_resp = await dl_client.get(image_url)
                     if img_resp.status_code == 200 and len(img_resp.content) > 0:
                         image_bytes = img_resp.content
@@ -287,10 +301,24 @@ class FacebookConnector(BaseConnector):
             except Exception as e:
                 logger.warning(f"Error reading local file {image_url_or_path}: {e}")
 
-        # 2. Remote URL (including Telegram bot URLs)
+        # 2. Check local UPLOADS_DIR if a /media/ URL or filename was passed
+        if not image_bytes and ("/media/" in image_url_or_path or not image_url_or_path.startswith("http")):
+            clean_name = os.path.basename(image_url_or_path.split("?")[0])
+            for check_dir in [config.UPLOADS_DIR, config.BASE_DIR / "uploads", Path(os.getcwd()) / "uploads"]:
+                cand = check_dir / clean_name
+                if cand.exists() and cand.is_file():
+                    try:
+                        with open(cand, "rb") as f:
+                            image_bytes = f.read()
+                        logger.info(f"Loaded image from local uploads dir {cand} ({len(image_bytes)} bytes)")
+                        break
+                    except Exception as e:
+                        logger.warning(f"Error reading local candidate {cand}: {e}")
+
+        # 3. Remote URL (including Telegram bot URLs, follow redirects)
         if not image_bytes and (image_url_or_path.startswith("http://") or image_url_or_path.startswith("https://")):
             try:
-                async with httpx.AsyncClient(timeout=25.0) as dl_client:
+                async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as dl_client:
                     r = await dl_client.get(image_url_or_path)
                     if r.status_code == 200 and len(r.content) > 0:
                         image_bytes = r.content

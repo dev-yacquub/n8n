@@ -214,7 +214,7 @@ class AgentBrain:
                     return final_content, None
 
                 # --- WRITE ACTIONS (Require Telegram User Confirmation) ---
-                target_media = media_url or args.get("image_url")
+                target_media = (media_path if media_path and os.path.exists(media_path) else None) or media_url or args.get("image_url")
 
                 if func_name == "post_to_facebook":
                     msg_content = args.get("message", "")

@@ -80,7 +80,11 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         elif self.path.startswith("/media/"):
             clean_path = self.path.split("?")[0]
             filename = os.path.basename(clean_path)
-            file_path = os.path.join(str(BASE_DIR), "uploads", filename)
+            file_path = os.path.join(str(config.UPLOADS_DIR), filename)
+            if not os.path.exists(file_path):
+                file_path = os.path.join(str(BASE_DIR), "uploads", filename)
+            if not os.path.exists(file_path):
+                file_path = os.path.join(os.getcwd(), "uploads", filename)
             if os.path.exists(file_path):
                 try:
                     with open(file_path, "rb") as f:

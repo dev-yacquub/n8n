@@ -12,8 +12,14 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
+UPLOADS_DIR = BASE_DIR / "uploads"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
 
 class Config:
+    BASE_DIR = BASE_DIR
+    UPLOADS_DIR = UPLOADS_DIR
+
     # --- Telegram Bot ---
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     TELEGRAM_ALLOWED_USER_ID: Optional[int] = (
@@ -51,6 +57,7 @@ class Config:
     GMAIL_APP_PASSWORD: str = os.getenv("GMAIL_APP_PASSWORD", "").strip()
     GMAIL_CLIENT_SECRET_FILE: str = os.getenv("GMAIL_CLIENT_SECRET_FILE", "").strip()
     RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "").strip()
+    BREVO_API_KEY: str = os.getenv("BREVO_API_KEY", "").strip()
     EMAIL_FROM: str = os.getenv("EMAIL_FROM", "").strip()
 
     # --- Substack ---
@@ -74,7 +81,7 @@ class Config:
                 if cls.WHATSAPP_MODE == "linked_device"
                 else bool(cls.WHATSAPP_PHONE_NUMBER_ID and cls.WHATSAPP_ACCESS_TOKEN)
             ),
-            "gmail": bool(cls.GMAIL_EMAIL and (cls.GMAIL_APP_PASSWORD or cls.GMAIL_CLIENT_SECRET_FILE)),
+            "gmail": bool((cls.GMAIL_EMAIL and (cls.GMAIL_APP_PASSWORD or cls.GMAIL_CLIENT_SECRET_FILE)) or cls.RESEND_API_KEY or cls.BREVO_API_KEY),
             "substack": bool(cls.SUBSTACK_SUBDOMAIN and cls.SUBSTACK_COOKIE_SID),
             "n8n": bool(cls.N8N_BASE_URL and cls.N8N_API_KEY)
         }

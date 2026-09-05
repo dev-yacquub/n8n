@@ -180,9 +180,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo_file = await update.message.photo[-1].get_file()
     image_url = photo_file.file_path
 
-    # Cache locally in uploads/ for direct binary upload to Facebook
-    uploads_dir = Path("uploads")
-    uploads_dir.mkdir(exist_ok=True)
+    # Cache locally in config.UPLOADS_DIR for direct binary upload to Meta
+    uploads_dir = config.UPLOADS_DIR
     local_path = uploads_dir / f"{update.message.message_id}_{photo_file.file_unique_id}.jpg"
     media_path = None
     try:

@@ -44,7 +44,7 @@ class GmailConnector(BaseConnector):
         self.app_password = config.GMAIL_APP_PASSWORD.replace(" ", "")
 
     def is_configured(self) -> bool:
-        return bool((self.email_address and self.app_password) or config.RESEND_API_KEY)
+        return bool((self.email_address and self.app_password) or config.RESEND_API_KEY or config.BREVO_API_KEY)
 
     def _sync_test_connection(self) -> ActionResult:
         try:
@@ -309,8 +309,58 @@ class GmailConnector(BaseConnector):
                 error=str(e)
             )
 
+    async def _send_via_brevo(self, to: str, subject: str, body: str, html_body: Optional[str] = None) -> ActionResult:
+        """Sends an email via Brevo REST API over HTTPS port 443 (free, sends to any recipient)."""
+        try:
+            sender_email = self.email_address or "yacquubqaxwe@gmail.com"
+            headers = {
+                "api-key": config.BREVO_API_KEY,
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+            payload = {
+                "sender": {"name": "SocialCommander", "email": sender_email},
+                "to": [{"email": to.strip()}],
+                "subject": subject or "No Subject",
+                "textContent": body or "",
+                "htmlContent": html_body or (body.replace("\n", "<br>") if body else "")
+            }
+            async with httpx.AsyncClient(timeout=25.0) as client:
+                res = await client.post("https://api.brevo.com/v3/smtp/email", headers=headers, json=payload)
+                data = res.json()
+                if res.status_code in (200, 201) and "messageId" in data:
+                    msg_id = data["messageId"]
+                    logger.info(f"Email successfully sent to {to} via Brevo HTTP API (ID: {msg_id})")
+                    return ActionResult(
+                        success=True,
+                        platform="gmail",
+                        action="send_email",
+                        message=f"Email successfully sent to {to}! (via Brevo HTTPS API)",
+                        data={"to": to, "subject": subject, "id": msg_id}
+                    )
+                else:
+                    err_msg = data.get("message", res.text)
+                    return ActionResult(
+                        success=False,
+                        platform="gmail",
+                        action="send_email",
+                        message=f"Failed to send email via Brevo: {err_msg}",
+                        error=err_msg
+                    )
+        except Exception as e:
+            return ActionResult(
+                success=False,
+                platform="gmail",
+                action="send_email",
+                message=f"Exception sending via Brevo: {str(e)}",
+                error=str(e)
+            )
+
     async def send_email(self, to: str, subject: str, body: str, html_body: Optional[str] = None) -> ActionResult:
-        """Sends an email via Resend HTTP API (if configured) or Gmail SMTP with dual-port fallback."""
+        """Sends an email via Brevo/Resend HTTP API (if configured) or Gmail SMTP with dual-port fallback."""
+        if config.BREVO_API_KEY:
+            return await self._send_via_brevo(to, subject, body, html_body)
+
         if config.RESEND_API_KEY:
             return await self._send_via_resend(to, subject, body, html_body)
 
@@ -319,7 +369,7 @@ class GmailConnector(BaseConnector):
                 success=False,
                 platform="gmail",
                 action="send_email",
-                message="Gmail credentials or RESEND_API_KEY not configured.",
+                message="Gmail credentials, BREVO_API_KEY, or RESEND_API_KEY not configured.",
                 error="UNCONFIGURED"
             )
         loop = asyncio.get_running_loop()
@@ -334,8 +384,10 @@ class GmailConnector(BaseConnector):
                 platform="gmail",
                 action="send_email",
                 message=(
-                    f"⚠️ Outbound SMTP ports (587/465) timed out (blocked on Render Free Tier).\n\n"
-                    f"💡 Quick Fix: Add RESEND_API_KEY in your Render Environment Variables (free at resend.com - takes 1 min, 3,000 free emails/month)."
+                    f"⚠️ Gmail SMTP timed out (35s) because Render Free Tier blocks outbound SMTP ports (587 & 465).\n\n"
+                    f"💡 1-Minute Free Fix: Add BREVO_API_KEY or RESEND_API_KEY to your Render Environment Variables.\n"
+                    f"• Brevo (brevo.com): 300 free emails/day to any recipient, no domain verification needed.\n"
+                    f"• Resend (resend.com): 3,000 free emails/month."
                 ),
                 error="RENDER_PORT_BLOCKED"
             )

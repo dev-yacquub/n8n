@@ -113,7 +113,7 @@ class ConfirmationManager:
                 if atype == "post_text":
                     result = await self.fb.post_text(payload.get("message") or payload.get("caption", ""))
                 elif atype == "post_photo":
-                    img = action.media_path or action.media_url or payload.get("image_url", "")
+                    img = (action.media_path if action.media_path and os.path.exists(action.media_path) else None) or action.media_url or payload.get("image_url", "")
                     caption = payload.get("caption") or payload.get("message", "")
                     result = await self.fb.post_photo(
                         image_url=img,
@@ -121,8 +121,7 @@ class ConfirmationManager:
                     )
                     # Cross-post to Instagram if flagged
                     if payload.get("cross_post_ig") and self.ig.is_configured():
-                        ig_img = action.media_url or img
-                        ig_res = await self.ig.post_photo(image_url=ig_img, caption=caption)
+                        ig_res = await self.ig.post_photo(image_url=img, caption=caption)
                         if ig_res.success:
                             result.message += f"\n📸 Instagram: {ig_res.message}"
                         else:
@@ -133,7 +132,7 @@ class ConfirmationManager:
             # 2. Instagram
             elif platform == "instagram":
                 if atype == "post_photo":
-                    img = action.media_url or action.media_path or payload.get("image_url", "")
+                    img = (action.media_path if action.media_path and os.path.exists(action.media_path) else None) or action.media_url or payload.get("image_url", "")
                     caption = payload.get("caption") or payload.get("message", "")
                     result = await self.ig.post_photo(
                         image_url=img,
@@ -153,7 +152,7 @@ class ConfirmationManager:
                     )
                 elif atype == "send_image":
                     recipient = payload.get("recipient") or payload.get("recipient_phone") or payload.get("to", "")
-                    img = action.media_url or action.media_path or payload.get("image_url", "")
+                    img = (action.media_path if action.media_path and os.path.exists(action.media_path) else None) or action.media_url or payload.get("image_url", "")
                     result = await self.wa.send_image(
                         recipient_phone=recipient,
                         image_url=img,
