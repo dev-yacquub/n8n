@@ -293,11 +293,21 @@ class GmailConnector(BaseConnector):
                     )
                 else:
                     err_msg = data.get("message", res.text)
+                    if "only send testing emails to your own email address" in err_msg.lower():
+                        user_friendly_msg = (
+                            f"⚠️ Resend Free Tier restriction: Currently, Resend only allows sending to your registered account email ({config.GMAIL_EMAIL or 'yacquubqaxwe@gmail.com'}).\n\n"
+                            f"💡 To send to ANY recipient:\n"
+                            f"• Option 1: Verify a domain at resend.com/domains\n"
+                            f"• Option 2: Add BREVO_API_KEY (from brevo.com) to Render — Brevo sends to any recipient for free without a domain."
+                        )
+                    else:
+                        user_friendly_msg = f"Failed to send email via Resend: {err_msg}"
+
                     return ActionResult(
                         success=False,
                         platform="gmail",
                         action="send_email",
-                        message=f"Failed to send email via Resend: {err_msg}",
+                        message=user_friendly_msg,
                         error=err_msg
                     )
         except Exception as e:
