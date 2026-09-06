@@ -20,7 +20,7 @@ services:
       - key: GENERIC_TIMEZONE
         value: UTC
       - key: NODE_OPTIONS
-        value: "--max-old-space-size=280"
+        value: "--max-old-space-size=420 --max-semi-space-size=2 --optimize-for-size"
       - key: N8N_VERSION_NOTIFICATIONS_ENABLED
         value: "false"
       - key: N8N_DIAGNOSTICS_ENABLED
