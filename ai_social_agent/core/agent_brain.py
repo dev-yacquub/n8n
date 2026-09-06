@@ -43,17 +43,27 @@ Current Active Facebook Page:
 
 Key Guidelines:
 - You speak fluent English and Somali (Af-Soomaali). Always match the language the user speaks.
+- CRITICAL: MULTI-LINGUAL COMMENT & MESSAGE INTELLIGENCE:
+  * When reading or replying to customer comments or inbox messages, ALWAYS DETECT the language of the commenter!
+  * If a comment is in Somali (e.g. "Waa imisa qiimaha?", "Sidee baan u helaa?", "Mahadsanidiin"), ALWAYS reply in natural, respectful, and culturally authentic Af-Soomaali!
+  * If a comment is in English, reply in polite, professional, and friendly English.
+  * If a comment is in Arabic (e.g. "كم السعر؟", "شكرا جزيلا"), reply in polite Arabic.
+  * If a comment is in Swahili (e.g. "Bei gani?", "Asante"), reply in fluent Swahili.
+  * For any other language, identify it and reply in that exact language.
+  * Always use `ai_reply_to_comment_in_language` or `reply_to_facebook_comment` to craft the perfect native response.
 - BE PROACTIVE, CREATIVE, AND ACTION-ORIENTED:
   When the user asks you to:
   1. Post to Facebook: Generate engaging copy with a catchy hook, line breaks, emojis, and hashtags, then CALL `post_to_facebook` immediately.
   2. Publish an Ad: Generate compelling marketing ad copy with a clear value proposition, select the most relevant CTA button (e.g. LEARN_MORE, SHOP_NOW, SIGN_UP, CONTACT_US), and CALL `publish_facebook_ad_post` immediately.
-  3. Respond to Customer Messages: Check the inbox with `get_facebook_inbox` or draft a polite, helpful, and professional reply and CALL `reply_to_facebook_message`.
-  4. Collect Post Insights: Call `get_facebook_posts_and_insights` and summarize the performance clearly with tips on how to improve engagement.
-  5. Reply to Comments: Call `reply_to_facebook_comment` with a friendly and supportive answer.
+  3. Schedule a Post: Calculate the future Unix timestamp and CALL `schedule_facebook_post`.
+  4. Post a Video/Reel: Call `post_video_to_facebook` with title and description.
+  5. Check Comments & Insights: Call `get_recent_page_comments`, `get_facebook_posts_and_insights`, or `get_facebook_page_analytics`.
+  6. Moderate Comments: Call `moderate_facebook_comment` to hide or delete spam/inappropriate comments.
 - Confirmation Safety:
-  Every publishing or sending action will automatically present a Telegram confirmation card with [Confirm], [Cancel], and [Revise] buttons, allowing the user to review before execution.
+  Every publishing, scheduling, or sending action will automatically present a Telegram confirmation card with [Confirm], [Cancel], and [Revise] buttons, allowing the user to review before execution.
 - When attached media is provided in the prompt, ALWAYS include it in your tool call parameters.
 """
+
 
 
 class AgentBrain:
@@ -267,6 +277,34 @@ class AgentBrain:
                     history.append({"role": "assistant", "content": final_content})
                     return final_content, None
 
+                elif func_name == "get_recent_page_comments":
+                    lim = args.get("limit", 15)
+                    res = await fb.get_recent_page_comments(limit=lim)
+                    history.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.get("id", "call_fb_recent_comments"),
+                        "name": func_name,
+                        "content": json.dumps(res.model_dump())
+                    })
+                    second_res = await self._call_llm(history, use_tools=False)
+                    final_content = second_res["choices"][0]["message"]["content"]
+                    history.append({"role": "assistant", "content": final_content})
+                    return final_content, None
+
+                elif func_name == "get_facebook_page_analytics":
+                    period = args.get("period", "day")
+                    res = await fb.get_page_insights_summary(period=period)
+                    history.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.get("id", "call_fb_analytics"),
+                        "name": func_name,
+                        "content": json.dumps(res.model_dump())
+                    })
+                    second_res = await self._call_llm(history, use_tools=False)
+                    final_content = second_res["choices"][0]["message"]["content"]
+                    history.append({"role": "assistant", "content": final_content})
+                    return final_content, None
+
                 elif func_name == "read_unread_emails":
                     max_res = args.get("max_results", 5)
                     res = await self.gmail.list_unread(max_res)
@@ -405,6 +443,92 @@ class AgentBrain:
                         platform="facebook",
                         action_type="reply_to_comment",
                         payload={"comment_id": comment_id, "message": reply_text},
+                        preview_text=preview,
+                        telegram_id=chat_id
+                    )
+                    return preview, pending
+
+                elif func_name == "ai_reply_to_comment_in_language":
+                    comment_id = args.get("comment_id", "")
+                    c_text = args.get("comment_text", "")
+                    lang = args.get("detected_language", "Auto-detected")
+                    reply_msg = args.get("reply_message", "")
+                    preview = (
+                        f"💬 *Preview: Native Comment Reply*\n\n"
+                        f"🗣 *Original Comment:* \"_{c_text}_\n"
+                        f"🌐 *Detected Language:* `{lang}`\n"
+                        f"📝 *Drafted Response:*\n\"{reply_msg}\"\n\n"
+                        f"_Publish this response in the commenter's language?_"
+                    )
+                    pending = confirmation_mgr.create_pending_action(
+                        platform="facebook",
+                        action_type="reply_to_comment",
+                        payload={"comment_id": comment_id, "message": reply_msg},
+                        preview_text=preview,
+                        telegram_id=chat_id
+                    )
+                    return preview, pending
+
+                elif func_name == "schedule_facebook_post":
+                    msg_content = args.get("message", "")
+                    ts = args.get("publish_timestamp", 0)
+                    from datetime import datetime, timezone
+                    try:
+                        time_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+                    except Exception:
+                        time_str = str(ts)
+                    preview = (
+                        f"⏰ *Preview: Scheduled Facebook Post*\n\n"
+                        f"📅 *Scheduled Publish Time:* `{time_str}`\n"
+                        f"📝 *Content:*\n{msg_content}\n\n"
+                        f"_Confirm scheduling this post on your Facebook Page?_"
+                    )
+                    pending = confirmation_mgr.create_pending_action(
+                        platform="facebook",
+                        action_type="schedule_post",
+                        payload={"message": msg_content, "publish_timestamp": ts, "image_url": target_media},
+                        preview_text=preview,
+                        media_url=target_media,
+                        telegram_id=chat_id
+                    )
+                    return preview, pending
+
+                elif func_name == "post_video_to_facebook":
+                    v_url = args.get("video_url") or target_media
+                    v_title = args.get("title", "Video Post")
+                    v_desc = args.get("description", "")
+                    preview = (
+                        f"🎬 *Preview: Facebook Video / Reel Upload*\n\n"
+                        f"🏷 *Title:* {v_title}\n"
+                        f"📝 *Description:*\n{v_desc}\n"
+                        f"🎥 *Source:* `{v_url}`\n\n"
+                        f"_Confirm to upload and publish this video to your page._"
+                    )
+                    pending = confirmation_mgr.create_pending_action(
+                        platform="facebook",
+                        action_type="post_video",
+                        payload={"video_url": v_url, "title": v_title, "description": v_desc},
+                        preview_text=preview,
+                        media_url=v_url,
+                        media_path=media_path,
+                        telegram_id=chat_id
+                    )
+                    return preview, pending
+
+                elif func_name == "moderate_facebook_comment":
+                    c_id = args.get("comment_id", "")
+                    act = args.get("action", "hide").lower()
+                    action_emoji = "🙈 Hide" if act == "hide" else ("👀 Unhide" if act == "unhide" else "🗑 Delete")
+                    preview = (
+                        f"🛡 *Preview: Facebook Comment Moderation*\n\n"
+                        f"🆔 *Comment ID:* `{c_id}`\n"
+                        f"⚡ *Action:* {action_emoji}\n\n"
+                        f"_Confirm to execute this moderation action on Facebook?_"
+                    )
+                    pending = confirmation_mgr.create_pending_action(
+                        platform="facebook",
+                        action_type="moderate_comment",
+                        payload={"comment_id": c_id, "action": act},
                         preview_text=preview,
                         telegram_id=chat_id
                     )

@@ -165,6 +165,24 @@ class ConfirmationManager:
                         comment_id=payload.get("comment_id", ""),
                         message=payload.get("message", "")
                     )
+                elif atype == "schedule_post":
+                    result = await fb.schedule_post(
+                        message=payload.get("message", ""),
+                        publish_timestamp=payload.get("publish_timestamp", 0),
+                        image_url=payload.get("image_url")
+                    )
+                elif atype == "post_video":
+                    video_src = (action.media_path if action.media_path and os.path.exists(action.media_path) else None) or action.media_url or payload.get("video_url", "")
+                    result = await fb.post_video(
+                        video_url_or_path=video_src,
+                        title=payload.get("title", "Video Post"),
+                        description=payload.get("description", "")
+                    )
+                elif atype == "moderate_comment":
+                    result = await fb.moderate_comment(
+                        comment_id=payload.get("comment_id", ""),
+                        action=payload.get("action", "hide")
+                    )
                 else:
                     result = ActionResult(success=False, platform="facebook", action=atype, message=f"Unknown action: {atype}")
 

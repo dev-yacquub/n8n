@@ -217,6 +217,140 @@ TOOLS_SCHEMA: List[Dict[str, Any]] = [
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "ai_reply_to_comment_in_language",
+            "description": "Analyze a Facebook comment, detect its language (e.g. Somali, English, Arabic, Swahili, etc.), and generate a contextual, polite response in the exact same language matching the commenter's tone.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "comment_id": {
+                        "type": "string",
+                        "description": "The comment ID to reply to."
+                    },
+                    "comment_text": {
+                        "type": "string",
+                        "description": "The original text of the comment to analyze and reply to."
+                    },
+                    "detected_language": {
+                        "type": "string",
+                        "description": "The language detected from the comment (e.g. 'Somali', 'English', 'Arabic', 'Swahili')."
+                    },
+                    "reply_message": {
+                        "type": "string",
+                        "description": "The drafted response in the detected language with emojis and polite tone."
+                    }
+                },
+                "required": ["comment_id", "comment_text", "reply_message"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_recent_page_comments",
+            "description": "Fetch recent customer comments across all latest posts on the Facebook Page.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of comments to fetch (default 15)."
+                    }
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "schedule_facebook_post",
+            "description": "Schedule a post to be published automatically at a future time on your Facebook Page.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "description": "The post content with hashtags and emojis."
+                    },
+                    "publish_timestamp": {
+                        "type": "integer",
+                        "description": "Unix timestamp in seconds for when the post should be published (at least 10 minutes in the future)."
+                    },
+                    "image_url": {
+                        "type": "string",
+                        "description": "Optional image URL."
+                    }
+                },
+                "required": ["message", "publish_timestamp"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "post_video_to_facebook",
+            "description": "Publish a video or Reel to your Facebook Page with title and description.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "video_url": {
+                        "type": "string",
+                        "description": "URL or local path of the video file."
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Title of the video or Reel."
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Description/caption for the video post with tags."
+                    }
+                },
+                "required": ["video_url", "title", "description"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "moderate_facebook_comment",
+            "description": "Moderate a comment on a Facebook post (hide, unhide, or delete).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "comment_id": {
+                        "type": "string",
+                        "description": "The comment ID to moderate."
+                    },
+                    "action": {
+                        "type": "string",
+                        "enum": ["hide", "unhide", "delete"],
+                        "description": "Action to perform: 'hide', 'unhide', or 'delete'."
+                    }
+                },
+                "required": ["comment_id", "action"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_facebook_page_analytics",
+            "description": "Fetch overall Facebook Page analytics including page impressions, page views, and engagement trends.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "period": {
+                        "type": "string",
+                        "enum": ["day", "week", "days_28"],
+                        "description": "Metric period: 'day', 'week', or 'days_28'. Default is 'day'."
+                    }
+                }
+            }
+        }
+    },
     # --- INSTAGRAM & CROSS POSTING ---
     {
         "type": "function",

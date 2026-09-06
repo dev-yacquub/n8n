@@ -1,8 +1,8 @@
 """
 Telegram Bot Application for Multi-Tenant Facebook Page AI Agent.
 Enables every Telegram user to independently connect their Facebook account,
-manage their Facebook Page, collect post insights, respond to customer messages,
-and publish ad posts or campaigns.
+manage their Facebook Page, collect post insights, respond to customer messages & comments
+in their native languages (Somali, English, Arabic, etc.), schedule posts, and publish ads or videos.
 Uses python-telegram-bot v21+ async architecture.
 """
 
@@ -68,14 +68,19 @@ def build_main_dashboard_keyboard(is_connected: bool) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton("📬 Inbox Messages", callback_data="btn_inbox"),
-                InlineKeyboardButton("🚀 Publish Ad", callback_data="btn_ad")
+                InlineKeyboardButton("💬 Post Comments", callback_data="btn_comments")
+            ],
+            [
+                InlineKeyboardButton("🚀 Publish Ad", callback_data="btn_ad"),
+                InlineKeyboardButton("⏰ Schedule Post", callback_data="btn_schedule")
             ],
             [
                 InlineKeyboardButton("📈 Post Insights", callback_data="btn_insights"),
-                InlineKeyboardButton("🔄 Switch Page", callback_data="btn_pages")
+                InlineKeyboardButton("🤖 Auto-Pilot", callback_data="btn_autoreply")
             ],
             [
-                InlineKeyboardButton("🔍 Connectivity Check", callback_data="btn_status")
+                InlineKeyboardButton("🔄 Switch Page", callback_data="btn_pages"),
+                InlineKeyboardButton("🔍 Diagnostics", callback_data="btn_status")
             ]
         ]
     else:
@@ -116,21 +121,23 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         page_name = creds.get("page_name", "Connected Page")
         page_id = creds.get("page_id", "N/A")
         welcome_text = (
-            f"👋 *Salaam {user_name}! Welcome back to SocialCommander AI.*\n\n"
+            f"👋 *Salaam {user_name}! Welcome to SocialCommander AI.*\n\n"
             f"🟢 *Active Facebook Page:* `{page_name}`\n"
             f"🆔 *Page ID:* `{page_id}`\n\n"
+            f"🌐 *Multi-Lingual AI Responder:* Active (Somali, English, Arabic, Swahili, etc.)\n\n"
             f"💡 *What can I do for you today?*\n"
-            f"• _\"Qoraal cusub Facebook iigu daabac oo ku saabsan barnaamijyadayada cusub\"_\n"
+            f"• _\"Qoraal cusub Facebook iigu daabac oo ku saabsan adeegyadayada\"_\n"
+            f"• _\"Check recent comments on my posts and reply to them in their language\"_\n"
             f"• _\"Show my Facebook inbox messages and customer inquiries\"_\n"
-            f"• _\"Create an ad post with a Learn More button linking to https://mysite.com\"_\n"
-            f"• _\"How did my latest 3 posts perform?\"_\n\n"
-            f"Use the buttons below or simply type in English or Somali!"
+            f"• _\"Create a Facebook ad post with a Shop Now button to https://mysite.com\"_\n"
+            f"• _\"Schedule a post for tomorrow at 10 AM\"_\n\n"
+            f"Use the buttons below or simply type your request!"
         )
     else:
         welcome_text = (
             f"👋 *Salaam {user_name}! Welcome to SocialCommander AI.*\n\n"
             f"I am your autonomous personal AI assistant that manages your **Facebook Page**, "
-            f"responds to customer messages, gathers post metrics, and publishes ads.\n\n"
+            f"responds to customer messages & comments in their native language, gathers post metrics, and publishes ads.\n\n"
             f"⚠️ *No Facebook Page Connected Yet.*\n"
             f"Every Telegram user can independently connect their own Facebook account!\n\n"
             f"👉 Tap *Connect Facebook Page* below or type `/connect` to link your page in 30 seconds."
@@ -208,6 +215,96 @@ async def inbox_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
     res = await fb.get_conversations(limit=5)
     await safe_reply_text(update.message, res.message)
+
+
+async def comments_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Fetches recent customer comments across latest posts with 1-tap multi-lingual reply options."""
+    if not is_user_authorized(update):
+        return
+
+    telegram_id = update.effective_user.id
+    fb = get_facebook_connector_for_user(telegram_id)
+    if not fb.is_configured():
+        await safe_reply_text(
+            update.message,
+            "⚠️ *Facebook Page not connected.* Please run `/connect` first."
+        )
+        return
+
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    res = await fb.get_recent_page_comments(limit=6)
+
+    if not res.success or not res.data or not res.data.get("comments"):
+        await safe_reply_text(update.message, res.message)
+        return
+
+    comments = res.data["comments"]
+    # Build inline buttons for each comment to reply in their language
+    buttons = []
+    for c in comments[:5]:
+        c_id = c["comment_id"]
+        author = c["author"]
+        snippet = c["message"][:20]
+        btn_text = f"🤖 Reply to {author}: \"{snippet}...\""
+        buttons.append([InlineKeyboardButton(btn_text, callback_data=f"reply_comment:{c_id}")])
+
+    keyboard = InlineKeyboardMarkup(buttons) if buttons else None
+    await safe_reply_text(update.message, res.message, reply_markup=keyboard)
+
+
+async def schedule_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Guided wizard for scheduling posts."""
+    if not is_user_authorized(update):
+        return
+
+    msg = (
+        f"⏰ *Schedule a Facebook Post*\n\n"
+        f"To schedule a post, simply tell me what to post and when!\n\n"
+        f"💡 *Examples:*\n"
+        f"• _\"Schedule a post for tomorrow at 3 PM announcing our 20% discount\"_\n"
+        f"• _\"Waxaad post Facebook u qorsheysaa beri 10:00 subaxnimo oo ku saabsan nolosha magaalada\"_\n"
+        f"• _\"Schedule this attached photo for Friday at 6 PM with an inspiring quote\"_\n\n"
+        f"I will calculate the exact timestamp, draft the copy, and ask for your confirmation!"
+    )
+    await safe_reply_text(update.message, msg)
+
+
+async def video_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Guidance for uploading video and Reels to Facebook Page."""
+    if not is_user_authorized(update):
+        return
+
+    msg = (
+        f"🎬 *Publish Facebook Video / Reel*\n\n"
+        f"To publish a video to your Facebook Page:\n"
+        f"1. Send a video file directly in this chat with a caption.\n"
+        f"2. Or provide a direct video URL (e.g. MP4 link).\n\n"
+        f"👉 *Example:* Send a video with caption: _\"Publish this reel to Facebook with an engaging hook about tech innovation\"_"
+    )
+    await safe_reply_text(update.message, msg)
+
+
+async def autoreply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Toggles AI Auto-Pilot mode for customer comments and messages."""
+    if not is_user_authorized(update):
+        return
+
+    telegram_id = update.effective_user.id
+    creds = user_db.get_user_credentials(telegram_id)
+    current = creds.get("auto_reply_enabled", False) if creds else False
+    new_state = not current
+
+    user_db.set_auto_reply_settings(telegram_id, enabled=new_state)
+    status_label = "🟢 *ENABLED*" if new_state else "⚪ *DISABLED*"
+
+    msg = (
+        f"🤖 *AI Auto-Pilot Settings Updated*\n\n"
+        f"Current Status: {status_label}\n\n"
+        f"When enabled, SocialCommander AI will proactively formulate context-aware responses to new comments "
+        f"and messages in the commenter's native language (Somali, English, Arabic, Swahili, etc.) with 1-tap confirmation cards.\n\n"
+        f"Type `/autoreply` again to toggle."
+    )
+    await safe_reply_text(update.message, msg)
 
 
 async def insights_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -306,18 +403,23 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🔹 `/connect` - Connect Facebook Page with Access Token\n"
         f"🔹 `/pages` - View and switch between your managed Facebook Pages\n"
         f"🔹 `/inbox` - Check Facebook Page customer conversations\n"
+        f"🔹 `/comments` - View post comments & 1-tap multi-lingual replies\n"
+        f"🔹 `/schedule` - Schedule a post for a future date/time\n"
         f"🔹 `/insights` - Check post metrics, likes, and reach\n"
         f"🔹 `/ad` - Guide to publishing Facebook CTA ads and campaigns\n"
+        f"🔹 `/video` - Guide to publishing video and Reels\n"
+        f"🔹 `/autoreply` - Toggle AI Auto-Pilot mode\n"
         f"🔹 `/disconnect` - Unlink Facebook account\n"
         f"🔹 `/status` - Live diagnostic test\n"
         f"🔹 `/clear` - Reset chat history with AI\n\n"
         f"💬 *Natural Language Prompts (English & Somali):*\n"
         f"• *Post to Page:* \"Qoraal Facebook u samee oo ku saabsan faa'iidooyinka AI\"\n"
         f"• *Photo Posting:* Send an image with caption: \"Publish this photo to Facebook\"\n"
+        f"• *Multi-Lingual Comment Reply:* \"Reply to the comment in Somali asking about price\"\n"
         f"• *Inbox Messages:* \"Check my Facebook messages and tell me who asked questions\"\n"
-        f"• *Reply to Customer:* \"Reply to the message from Ahmed saying we will deliver tomorrow\"\n"
+        f"• *Reply to Customer:* \"Reply to Ahmed saying we deliver tomorrow at 9 AM\"\n"
         f"• *Publish Ad:* \"Create an ad for our course with Learn More button linking to https://edu.com\"\n"
-        f"• *Post Analytics:* \"How did my latest Facebook posts perform?\""
+        f"• *Schedule Post:* \"Schedule a post for tomorrow at 3 PM celebrating our anniversary\""
     )
     await safe_reply_text(update.message, help_text)
 
@@ -331,7 +433,7 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =============================================================================
-# MESSAGE & PHOTO HANDLERS
+# MESSAGE, PHOTO & VIDEO HANDLERS
 # =============================================================================
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -406,7 +508,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"📄 *Page:* {p_name}\n"
                 f"🆔 *Page ID:* `{p_id}`\n"
                 f"🏷 *Category:* {p_cat}\n\n"
-                f"Your AI agent is now ready to manage your page, publish posts, reply to messages, and run ads!",
+                f"Your AI agent is now ready to manage your page, reply in multiple languages, publish posts, and run ads!",
                 reply_markup=build_main_dashboard_keyboard(True)
             )
         return
@@ -431,11 +533,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     caption = update.message.caption or "Publish this photo to Facebook Page"
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
-    # Get highest resolution photo
     photo_file = await update.message.photo[-1].get_file()
     image_url = photo_file.file_path
 
-    # Cache locally in config.UPLOADS_DIR
     uploads_dir = config.UPLOADS_DIR
     local_path = uploads_dir / f"{update.message.message_id}_{photo_file.file_unique_id}.jpg"
     media_path = None
@@ -452,6 +552,46 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_text, pending_action = await agent_brain.process_user_message(
         chat_id=chat_id,
         user_text=caption,
+        media_url=public_media_url,
+        media_path=media_path
+    )
+
+    if pending_action:
+        keyboard = confirmation_mgr.build_keyboard(pending_action.action_id)
+        await safe_reply_text(update.message, reply_text, reply_markup=keyboard)
+    else:
+        await safe_reply_text(update.message, reply_text)
+
+
+async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles incoming videos, caches locally, and routes to AI Brain for video/reel publishing."""
+    if not is_user_authorized(update) or not update.message or not update.message.video:
+        return
+
+    chat_id = update.effective_chat.id
+    caption = update.message.caption or "Publish this video to Facebook Page"
+    await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.UPLOAD_VIDEO)
+
+    video_file = await update.message.video.get_file()
+    video_url = video_file.file_path
+
+    uploads_dir = config.UPLOADS_DIR
+    local_path = uploads_dir / f"vid_{update.message.message_id}_{video_file.file_unique_id}.mp4"
+    media_path = None
+    try:
+        await video_file.download_to_drive(custom_path=local_path)
+        media_path = str(local_path.resolve())
+        logger.info(f"Cached Telegram video locally at: {media_path}")
+    except Exception as e:
+        logger.warning(f"Could not download video to local disk: {e}")
+
+    public_base = os.getenv("RENDER_EXTERNAL_URL", "https://yacquub-social-commander-agent.onrender.com").rstrip("/")
+    public_media_url = f"{public_base}/media/{local_path.name}" if media_path else video_url
+
+    prompt = f"Publish this video to Facebook Page: {caption}"
+    reply_text, pending_action = await agent_brain.process_user_message(
+        chat_id=chat_id,
+        user_text=prompt,
         media_url=public_media_url,
         media_path=media_path
     )
@@ -494,8 +634,19 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await safe_edit_text(query, "❌ Could not activate selected page.")
         return
 
-    # 2. Quick Dashboard Buttons
-    if data == "btn_connect":
+    # 2. Reply to specific comment
+    elif data.startswith("reply_comment:"):
+        comment_id = data.split(":", 1)[1]
+        await safe_reply_text(
+            query.message,
+            f"🤖 *Multi-Lingual Comment Reply:*\n"
+            f"To reply to comment `{comment_id}` in the commenter's native language, type:\n\n"
+            f"_\"Reply to comment {comment_id} in their language saying...\"_ or _\"Auto-reply to comment {comment_id}\"_"
+        )
+        return
+
+    # 3. Quick Dashboard Buttons
+    elif data == "btn_connect":
         context.user_data["waiting_for_fb_token"] = True
         await safe_reply_text(
             query.message,
@@ -515,6 +666,18 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
         res = await fb.get_conversations(limit=5)
         await safe_reply_text(query.message, res.message)
+        return
+
+    elif data == "btn_comments":
+        await comments_command(update, context)
+        return
+
+    elif data == "btn_schedule":
+        await schedule_command(update, context)
+        return
+
+    elif data == "btn_autoreply":
+        await autoreply_command(update, context)
         return
 
     elif data == "btn_insights":
@@ -548,7 +711,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await help_command(update, context)
         return
 
-    # 3. Action Confirmations
+    # 4. Action Confirmations
     if ":" in data:
         action_cmd, action_id = data.split(":", 1)
 
@@ -591,6 +754,10 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("connect", connect_command))
     app.add_handler(CommandHandler("pages", pages_command))
     app.add_handler(CommandHandler("inbox", inbox_command))
+    app.add_handler(CommandHandler("comments", comments_command))
+    app.add_handler(CommandHandler("schedule", schedule_command))
+    app.add_handler(CommandHandler("autoreply", autoreply_command))
+    app.add_handler(CommandHandler("video", video_command))
     app.add_handler(CommandHandler("insights", insights_command))
     app.add_handler(CommandHandler("ad", ad_command))
     app.add_handler(CommandHandler("disconnect", disconnect_command))
@@ -601,8 +768,9 @@ def build_application() -> Application:
     # Interactive buttons
     app.add_handler(CallbackQueryHandler(handle_callback_query))
 
-    # Messages
+    # Messages (Photos, Videos, Text)
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(filters.VIDEO, handle_video))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     return app

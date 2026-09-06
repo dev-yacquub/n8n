@@ -1034,6 +1034,352 @@ class FacebookConnector(BaseConnector):
 
         return None
 
+    async def get_recent_page_comments(self, limit: int = 15) -> ActionResult:
+        """
+        Fetches recent customer comments across all latest Page posts.
+        Returns flattened list of comments with post title, commenter name, and text.
+        """
+        if not self.is_configured():
+            return ActionResult(
+                success=False,
+                platform="facebook",
+                action="get_recent_page_comments",
+                message="Facebook credentials not configured.",
+                error="UNCONFIGURED"
+            )
+
+        url = f"{self.base_url}/{self.page_id}/posts"
+        params = {
+            "fields": "id,message,comments.limit(10){id,from,message,created_time,like_count}",
+            "limit": 5,
+            "access_token": self.access_token
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=25.0) as client:
+                res = await client.get(url, params=params)
+                data = res.json()
+
+                if res.status_code == 200 and "data" in data:
+                    posts = data["data"]
+                    all_comments = []
+
+                    for p in posts:
+                        p_id = p.get("id")
+                        p_title = (p.get("message") or "[Media Post]")[:50]
+                        comments_data = p.get("comments", {}).get("data", [])
+                        for c in comments_data:
+                            all_comments.append({
+                                "comment_id": c.get("id"),
+                                "post_id": p_id,
+                                "post_title": p_title,
+                                "author": c.get("from", {}).get("name", "User"),
+                                "message": c.get("message", ""),
+                                "created_time": c.get("created_time", "")[:16].replace("T", " ")
+                            })
+                            if len(all_comments) >= limit:
+                                break
+                        if len(all_comments) >= limit:
+                            break
+
+                    if not all_comments:
+                        return ActionResult(
+                            success=True,
+                            platform="facebook",
+                            action="get_recent_page_comments",
+                            message="💬 *No comments found on recent posts.*",
+                            data={"comments": []}
+                        )
+
+                    lines = [f"💬 *Recent Comments on Page Posts ({len(all_comments)} total):*"]
+                    for idx, c in enumerate(all_comments, 1):
+                        lines.append(
+                            f"{idx}. 👤 *{c['author']}* (Comment ID: `{c['comment_id']}`)\n"
+                            f"   📌 *Post:* _{c['post_title']}_\n"
+                            f"   💬 \"_{c['message']}_\"\n"
+                            f"   🕒 {c['created_time']}"
+                        )
+
+                    return ActionResult(
+                        success=True,
+                        platform="facebook",
+                        action="get_recent_page_comments",
+                        message="\n\n".join(lines),
+                        data={"comments": all_comments}
+                    )
+                else:
+                    err_msg = data.get("error", {}).get("message", res.text)
+                    return ActionResult(
+                        success=False,
+                        platform="facebook",
+                        action="get_recent_page_comments",
+                        message=f"Failed to fetch page comments: {err_msg}",
+                        error=err_msg
+                    )
+        except Exception as e:
+            return ActionResult(
+                success=False,
+                platform="facebook",
+                action="get_recent_page_comments",
+                message=f"Exception fetching page comments: {str(e)}",
+                error=str(e)
+            )
+
+    async def schedule_post(
+        self,
+        message: str,
+        publish_timestamp: int,
+        image_url: Optional[str] = None
+    ) -> ActionResult:
+        """
+        Schedules a Facebook post to be published at a future time.
+        publish_timestamp must be between 10 minutes and 75 days in the future.
+        """
+        if not self.is_configured():
+            return ActionResult(
+                success=False,
+                platform="facebook",
+                action="schedule_post",
+                message="Facebook credentials not configured.",
+                error="UNCONFIGURED"
+            )
+
+        url = f"{self.base_url}/{self.page_id}/feed"
+        payload = {
+            "message": message,
+            "published": "false",
+            "scheduled_publish_time": str(int(publish_timestamp)),
+            "access_token": self.access_token
+        }
+        if image_url:
+            payload["link"] = image_url
+
+        try:
+            async with httpx.AsyncClient(timeout=25.0) as client:
+                res = await client.post(url, data=payload)
+                data = res.json()
+
+                if res.status_code == 200 and "id" in data:
+                    return ActionResult(
+                        success=True,
+                        platform="facebook",
+                        action="schedule_post",
+                        message=f"⏰ Successfully scheduled post! Post ID: `{data['id']}` (Scheduled for timestamp: {publish_timestamp})",
+                        data={"post_id": data["id"], "scheduled_time": publish_timestamp}
+                    )
+                else:
+                    err_msg = data.get("error", {}).get("message", res.text)
+                    return ActionResult(
+                        success=False,
+                        platform="facebook",
+                        action="schedule_post",
+                        message=f"Failed to schedule post: {err_msg}",
+                        error=err_msg
+                    )
+        except Exception as e:
+            return ActionResult(
+                success=False,
+                platform="facebook",
+                action="schedule_post",
+                message=f"Exception scheduling post: {str(e)}",
+                error=str(e)
+            )
+
+    async def post_video(
+        self,
+        video_url_or_path: str,
+        title: str,
+        description: str
+    ) -> ActionResult:
+        """Publishes a video or Reel to the Facebook Page."""
+        if not self.is_configured():
+            return ActionResult(
+                success=False,
+                platform="facebook",
+                action="post_video",
+                message="Facebook credentials not configured.",
+                error="UNCONFIGURED"
+            )
+
+        url = f"{self.base_url}/{self.page_id}/videos"
+        video_bytes = None
+
+        if os.path.exists(video_url_or_path):
+            try:
+                with open(video_url_or_path, "rb") as f:
+                    video_bytes = f.read()
+            except Exception as e:
+                logger.warning(f"Error reading local video file: {e}")
+
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                if video_bytes:
+                    files = {"source": ("video.mp4", video_bytes, "video/mp4")}
+                    data = {
+                        "title": title,
+                        "description": description,
+                        "access_token": self.access_token
+                    }
+                    res = await client.post(url, files=files, data=data)
+                else:
+                    params = {
+                        "file_url": video_url_or_path,
+                        "title": title,
+                        "description": description,
+                        "access_token": self.access_token
+                    }
+                    res = await client.post(url, params=params)
+
+                data = res.json()
+                if res.status_code == 200 and "id" in data:
+                    return ActionResult(
+                        success=True,
+                        platform="facebook",
+                        action="post_video",
+                        message=f"🎬 Successfully published video to Facebook Page! Video ID: `{data['id']}`",
+                        data={"video_id": data["id"]}
+                    )
+                else:
+                    err_msg = data.get("error", {}).get("message", res.text)
+                    return ActionResult(
+                        success=False,
+                        platform="facebook",
+                        action="post_video",
+                        message=f"Failed to publish video: {err_msg}",
+                        error=err_msg
+                    )
+        except Exception as e:
+            return ActionResult(
+                success=False,
+                platform="facebook",
+                action="post_video",
+                message=f"Exception publishing video: {str(e)}",
+                error=str(e)
+            )
+
+    async def moderate_comment(
+        self,
+        comment_id: str,
+        action: str = "hide"
+    ) -> ActionResult:
+        """
+        Moderates a comment on a Facebook post.
+        action can be 'hide', 'unhide', or 'delete'.
+        """
+        if not self.is_configured():
+            return ActionResult(
+                success=False,
+                platform="facebook",
+                action="moderate_comment",
+                message="Facebook credentials not configured.",
+                error="UNCONFIGURED"
+            )
+
+        clean_action = action.lower().strip()
+
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                if clean_action == "delete":
+                    url = f"{self.base_url}/{comment_id}"
+                    res = await client.delete(url, params={"access_token": self.access_token})
+                    data = res.json()
+                    if res.status_code == 200 and data.get("success"):
+                        return ActionResult(
+                            success=True,
+                            platform="facebook",
+                            action="moderate_comment",
+                            message=f"🗑 Successfully deleted comment `{comment_id}`.",
+                            data=data
+                        )
+                else:
+                    is_hidden = "true" if clean_action == "hide" else "false"
+                    url = f"{self.base_url}/{comment_id}"
+                    res = await client.post(url, data={"is_hidden": is_hidden, "access_token": self.access_token})
+                    data = res.json()
+                    if res.status_code == 200 and data.get("success"):
+                        action_label = "hidden" if is_hidden == "true" else "unhidden"
+                        return ActionResult(
+                            success=True,
+                            platform="facebook",
+                            action="moderate_comment",
+                            message=f"🙈 Successfully {action_label} comment `{comment_id}`.",
+                            data=data
+                        )
+
+                err_msg = data.get("error", {}).get("message", res.text)
+                return ActionResult(
+                    success=False,
+                    platform="facebook",
+                    action="moderate_comment",
+                    message=f"Failed to moderate comment: {err_msg}",
+                    error=err_msg
+                )
+        except Exception as e:
+            return ActionResult(
+                success=False,
+                platform="facebook",
+                action="moderate_comment",
+                message=f"Exception moderating comment: {str(e)}",
+                error=str(e)
+            )
+
+    async def get_page_insights_summary(self, period: str = "day") -> ActionResult:
+        """Fetches page impressions, page views, and engagement trends."""
+        if not self.is_configured():
+            return ActionResult(
+                success=False,
+                platform="facebook",
+                action="get_page_insights_summary",
+                message="Facebook credentials not configured.",
+                error="UNCONFIGURED"
+            )
+
+        url = f"{self.base_url}/{self.page_id}/insights"
+        params = {
+            "metric": "page_impressions,page_post_engagements,page_views_total",
+            "period": period,
+            "access_token": self.access_token
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=25.0) as client:
+                res = await client.get(url, params=params)
+                data = res.json()
+
+                if res.status_code == 200 and "data" in data:
+                    metrics = data["data"]
+                    lines = [f"📈 *Facebook Page Analytics ({period.capitalize()} Period):*"]
+                    for m in metrics:
+                        m_name = m.get("title") or m.get("name", "Metric")
+                        values = m.get("values", [])
+                        latest_val = values[-1].get("value", 0) if values else 0
+                        lines.append(f"• *{m_name}:* `{latest_val:,}`")
+
+                    return ActionResult(
+                        success=True,
+                        platform="facebook",
+                        action="get_page_insights_summary",
+                        message="\n".join(lines),
+                        data={"metrics": metrics}
+                    )
+                else:
+                    err_msg = data.get("error", {}).get("message", res.text)
+                    return ActionResult(
+                        success=False,
+                        platform="facebook",
+                        action="get_page_insights_summary",
+                        message=f"Failed to retrieve page insights: {err_msg}",
+                        error=err_msg
+                    )
+        except Exception as e:
+            return ActionResult(
+                success=False,
+                platform="facebook",
+                action="get_page_insights_summary",
+                message=f"Exception retrieving page insights: {str(e)}",
+                error=str(e)
+            )
+
 
 def get_facebook_connector_for_user(telegram_id: int) -> FacebookConnector:
     """

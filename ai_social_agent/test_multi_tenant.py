@@ -112,7 +112,13 @@ def test_tools_schema():
         "get_conversation_messages",
         "reply_to_facebook_message",
         "get_facebook_post_comments",
-        "reply_to_facebook_comment"
+        "reply_to_facebook_comment",
+        "ai_reply_to_comment_in_language",
+        "get_recent_page_comments",
+        "schedule_facebook_post",
+        "post_video_to_facebook",
+        "moderate_facebook_comment",
+        "get_facebook_page_analytics"
     ]
     registered_names = [t["function"]["name"] for t in TOOLS_SCHEMA]
 
@@ -121,6 +127,25 @@ def test_tools_schema():
         print(f"✅ Tool verified: {t_name}")
 
     print(f"✅ Total tools registered: {len(TOOLS_SCHEMA)}")
+
+
+def test_multilingual_comment_handling():
+    print("\n--- TEST 5: Multi-Lingual Comment Reply Action ---")
+    action = confirmation_mgr.create_pending_action(
+        platform="facebook",
+        action_type="reply_to_comment",
+        payload={
+            "comment_id": "comment_so_123",
+            "message": "Waad ku mahadsan tahay su'aashaada! Qiimuhu waa $25, waxaana laguugu keenayaa 24 saac gudahood."
+        },
+        preview_text="Preview: Somali Comment Reply",
+        telegram_id=999005
+    )
+    assert action.telegram_id == 999005
+    assert "mahadsan" in action.payload["message"]
+    print("✅ Somali language comment reply successfully staged with confirmation card")
+
+    confirmation_mgr.cancel_action(action.action_id)
 
 
 def test_confirmation_manager_multi_tenancy():
@@ -154,6 +179,7 @@ def main():
         test_facebook_connector_factory()
         test_tools_schema()
         test_confirmation_manager_multi_tenancy()
+        test_multilingual_comment_handling()
         print("\n" + "=" * 60)
         print("🎉 ALL TESTS PASSED SUCCESSFULLY! 🚀")
         print("=" * 60)
