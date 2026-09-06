@@ -7,6 +7,7 @@ Uses python-telegram-bot v21+ async architecture.
 """
 
 import os
+import re
 import logging
 import asyncio
 from pathlib import Path
@@ -445,16 +446,20 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text.strip()
     user = update.effective_user
 
-    # 1. Handle Facebook Token Connection Wizard
-    if context.user_data.get("waiting_for_fb_token"):
+    # 1. Handle Facebook Token Connection Wizard or direct token paste
+    token_match = re.search(r'(EAA[a-zA-Z0-9]{30,})', user_text)
+    is_token_input = context.user_data.get("waiting_for_fb_token") or bool(token_match)
+
+    if is_token_input:
         if user_text.lower() in ("/cancel", "cancel"):
             context.user_data["waiting_for_fb_token"] = False
             await safe_reply_text(update.message, "❌ Token setup cancelled.")
             return
 
         # User submitted token
+        submitted_token = token_match.group(1) if token_match else user_text
         await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
-        validation = await FacebookConnector.validate_token(user_text)
+        validation = await FacebookConnector.validate_token(submitted_token)
 
         if not validation.success:
             await safe_reply_text(
@@ -479,7 +484,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Save pages to database
         active_page = user_db.save_user_token_and_pages(
             telegram_id=chat_id,
-            user_token=user_text,
+            user_token=submitted_token,
             pages=pages,
             username=user.username,
             first_name=user.first_name

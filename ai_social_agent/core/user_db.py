@@ -210,11 +210,20 @@ class UserDatabase:
                     "auto_reply_instructions": row["auto_reply_instructions"]
                 }
 
-        # Fallback to .env defaults if configured
+        # Auto-seed from .env if configured so user is never unauthenticated or forgotten
         if config.FACEBOOK_PAGE_ID and config.FACEBOOK_ACCESS_TOKEN:
+            default_name = "BUUB CAWL" if config.FACEBOOK_PAGE_ID == "106972352162498" else "Connected Facebook Page"
+            self.save_page(
+                telegram_id=telegram_id,
+                page_id=config.FACEBOOK_PAGE_ID,
+                page_name=default_name,
+                page_access_token=config.FACEBOOK_ACCESS_TOKEN,
+                category="Digital creator",
+                set_active=True
+            )
             return {
                 "page_id": config.FACEBOOK_PAGE_ID,
-                "page_name": "Default Configured Page",
+                "page_name": default_name,
                 "page_access_token": config.FACEBOOK_ACCESS_TOKEN,
                 "ad_account_id": None,
                 "auto_reply_enabled": False,
@@ -234,6 +243,16 @@ class UserDatabase:
                 ORDER BY is_active DESC, page_name ASC
             """, (telegram_id,))
             rows = cursor.fetchall()
+            if not rows and config.FACEBOOK_PAGE_ID and config.FACEBOOK_ACCESS_TOKEN:
+                # Seed default page
+                self.get_user_credentials(telegram_id)
+                cursor.execute("""
+                    SELECT page_id, page_name, category, fan_count, is_active
+                    FROM user_pages
+                    WHERE telegram_id = ?
+                    ORDER BY is_active DESC, page_name ASC
+                """, (telegram_id,))
+                rows = cursor.fetchall()
             return [dict(r) for r in rows]
 
     def set_active_page(self, telegram_id: int, page_id: str) -> bool:
