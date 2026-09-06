@@ -1,9 +1,10 @@
 """
 Confirmation Manager for Human-In-The-Loop action execution.
 Stores pending actions with UUIDs and provides Telegram Inline Keyboards.
-Executes confirmed actions safely.
+Executes confirmed actions safely with multi-tenant user credentials.
 """
 
+import os
 import uuid
 import time
 from typing import Dict, Any, Optional, Callable
@@ -12,6 +13,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from ..connectors import (
     FacebookConnector,
+    get_facebook_connector_for_user,
     InstagramConnector,
     WhatsAppConnector,
     GmailConnector,
@@ -31,12 +33,13 @@ class PendingAction:
     created_at: float = field(default_factory=time.time)
     media_url: Optional[str] = None
     media_path: Optional[str] = None
+    telegram_id: Optional[int] = None
 
 
 class ConfirmationManager:
     def __init__(self):
         self._pending: Dict[str, PendingAction] = {}
-        # Instantiate connectors
+        # Default connectors
         self.fb = FacebookConnector()
         self.ig = InstagramConnector()
         self.wa = WhatsAppConnector()
@@ -51,7 +54,8 @@ class ConfirmationManager:
         payload: Dict[str, Any],
         preview_text: str,
         media_url: Optional[str] = None,
-        media_path: Optional[str] = None
+        media_path: Optional[str] = None,
+        telegram_id: Optional[int] = None
     ) -> PendingAction:
         """Stores a new action requiring user confirmation."""
         action_id = str(uuid.uuid4())[:8]
@@ -62,7 +66,8 @@ class ConfirmationManager:
             payload=payload,
             preview_text=preview_text,
             media_url=media_url,
-            media_path=media_path
+            media_path=media_path,
+            telegram_id=telegram_id
         )
         self._pending[action_id] = pending
         return pending
@@ -80,7 +85,7 @@ class ConfirmationManager:
         """Constructs Telegram Inline Keyboard for the pending action."""
         keyboard = [
             [
-                InlineKeyboardButton("🚀 Confirm & Publish", callback_data=f"confirm:{action_id}"),
+                InlineKeyboardButton("🚀 Confirm & Send", callback_data=f"confirm:{action_id}"),
                 InlineKeyboardButton("❌ Cancel", callback_data=f"cancel:{action_id}")
             ],
             [
@@ -108,24 +113,58 @@ class ConfirmationManager:
         result: ActionResult
 
         try:
-            # 1. Facebook
+            # 1. Facebook (Multi-Tenant Aware)
             if platform == "facebook":
+                fb = get_facebook_connector_for_user(action.telegram_id) if action.telegram_id else self.fb
+                if not fb.is_configured():
+                    return ActionResult(
+                        success=False,
+                        platform="facebook",
+                        action=atype,
+                        message="Facebook Page credentials not found. Please run /connect first.",
+                        error="UNCONFIGURED"
+                    )
+
                 if atype == "post_text":
-                    result = await self.fb.post_text(payload.get("message") or payload.get("caption", ""))
+                    result = await fb.post_text(payload.get("message") or payload.get("caption", ""))
                 elif atype == "post_photo":
                     img = (action.media_path if action.media_path and os.path.exists(action.media_path) else None) or action.media_url or payload.get("image_url", "")
                     caption = payload.get("caption") or payload.get("message", "")
-                    result = await self.fb.post_photo(
+                    result = await fb.post_photo(
                         image_url=img,
                         caption=caption
                     )
-                    # Cross-post to Instagram if flagged
+                    # Cross-post to Instagram if requested
                     if payload.get("cross_post_ig") and self.ig.is_configured():
                         ig_res = await self.ig.post_photo(image_url=img, caption=caption)
                         if ig_res.success:
                             result.message += f"\n📸 Instagram: {ig_res.message}"
                         else:
                             result.message += f"\n⚠️ Instagram: {ig_res.error or ig_res.message}"
+                elif atype == "publish_cta_ad_post":
+                    result = await fb.publish_cta_ad_post(
+                        message=payload.get("message", ""),
+                        link=payload.get("link", ""),
+                        cta_type=payload.get("cta_type", "LEARN_MORE"),
+                        image_url=payload.get("image_url")
+                    )
+                elif atype == "create_ad_campaign":
+                    result = await fb.create_ad_campaign(
+                        name=payload.get("name", "Ad Campaign"),
+                        objective=payload.get("objective", "OUTCOME_TRAFFIC"),
+                        daily_budget=payload.get("daily_budget")
+                    )
+                elif atype == "send_inbox_reply":
+                    result = await fb.send_inbox_reply(
+                        conversation_id=payload.get("conversation_id", ""),
+                        message=payload.get("message", ""),
+                        recipient_id=payload.get("recipient_id")
+                    )
+                elif atype == "reply_to_comment":
+                    result = await fb.reply_to_comment(
+                        comment_id=payload.get("comment_id", ""),
+                        message=payload.get("message", "")
+                    )
                 else:
                     result = ActionResult(success=False, platform="facebook", action=atype, message=f"Unknown action: {atype}")
 
@@ -220,7 +259,8 @@ class ConfirmationManager:
             )
 
         # Remove from pending on completion
-        del self._pending[action_id]
+        if action_id in self._pending:
+            del self._pending[action_id]
         return result
 
 

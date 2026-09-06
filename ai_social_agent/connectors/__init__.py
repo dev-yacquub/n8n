@@ -1,5 +1,5 @@
 from .base import BaseConnector, ActionResult
-from .facebook_connector import FacebookConnector
+from .facebook_connector import FacebookConnector, get_facebook_connector_for_user
 from .instagram_connector import InstagramConnector
 from .whatsapp_connector import WhatsAppConnector
 from .gmail_connector import GmailConnector
@@ -10,9 +10,11 @@ __all__ = [
     "BaseConnector",
     "ActionResult",
     "FacebookConnector",
+    "get_facebook_connector_for_user",
     "InstagramConnector",
     "WhatsAppConnector",
     "GmailConnector",
     "SubstackConnector",
     "N8NBridge",
 ]
+

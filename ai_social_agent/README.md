@@ -1,20 +1,23 @@
 # 🤖 SocialCommander AI — Multi-Platform AI Master Agent
+## Multi-Tenant Facebook Page AI Manager & Cross-Platform Commander
 
-Control all your social media, messaging channels, newsletters, and emails through a single **Telegram Bot** powered by an AI Agent.
+Manage your entire **Facebook Page** autonomously through a personal **Telegram Bot** powered by an advanced AI reasoning agent. Every Telegram user can independently connect their own Facebook account, manage pages, respond to customer messages, gather post insights, and publish ad posts or campaigns.
 
 ---
 
-## 🌟 Supported Channels
+## 🌟 Facebook Page Capabilities (Multi-Tenant)
 
-| Platform | Actions Supported | Status |
+| Feature | Description | Command / Prompt |
 |:---|:---|:---:|
-| **Telegram** | Bot interface, inline approval buttons, photo uploads | 🟢 Ready |
-| **Facebook Pages** | Text posts, photo posts with captions, analytics | 🟢 Configured |
-| **Instagram Business** | Photos, captions, hashtags, recent media & comments | 🟢 Configured |
-| **WhatsApp Cloud** | Direct messages, media attachments, template notifications | 🟡 Add Phone ID |
-| **Gmail** | Read unread, search threads, draft emails, send emails | 🟡 Add App Password |
-| **Substack** | Newsletter drafts, Substack Notes, public post retrieval | 🟡 Add Subdomain |
-| **n8n Automation** | Trigger workflows, check executions, image synthesis | 🟢 Configured |
+| **Independent Multi-Tenant** | Each Telegram user connects their own Facebook tokens and pages independently with zero data leakage. | `/connect`, `/pages` |
+| **Dynamic Token Collection** | Automatically validates User or Page Access Tokens via Meta Graph API, discovering all managed pages. | `/connect` |
+| **Page Profile & Stats** | Fetches follower counts, page likes, category, ratings, and verification status. | `/start` (Page Profile button) |
+| **Post Creation** | Generates engaging, high-converting posts (text, photos, media) with custom hooks and hashtags. | Send text or photo |
+| **Ad Publishing (CTA Posts)** | Creates sponsored/ad-style posts with official action buttons (`[Shop Now]`, `[Learn More]`, `[Sign Up]`, `[Contact Us]`). | `/ad` or prompt |
+| **Meta Ads Campaigns** | Creates Ad Campaigns in Meta Ad Accounts (`act_...`) with budget and objective controls. | Prompt AI |
+| **Inbox Customer Messaging** | Reads unread conversations in the Facebook Messenger Page Inbox and drafts/sends replies to customers. | `/inbox` or prompt |
+| **Post Insights & Metrics** | Collects reach, likes, comments, shares, and engagement summaries for recent posts. | `/insights` or prompt |
+| **Comment Management** | Fetches comments on posts and drafts/publishes direct replies to user inquiries. | Prompt AI |
 
 ---
 
@@ -25,9 +28,9 @@ Control all your social media, messaging channels, newsletters, and emails throu
 python -m pip install -r requirements.txt
 ```
 
-### 2. Verify Connections & Run Diagnostics
+### 2. Run Automated Verification Tests
 ```powershell
-python test_connectors.py
+python test_multi_tenant.py
 ```
 
 ### 3. Start the Telegram Bot
@@ -37,68 +40,40 @@ python main.py
 
 ---
 
-## 🔑 Platform Setup Guide
+## 🔑 Facebook Connection Guide
 
-### 1. Facebook & Instagram
-Already pre-configured with your Meta Graph API tokens and Page/Account IDs in `.env`.
-To update tokens in the future:
-- `FACEBOOK_PAGE_ID` & `FACEBOOK_ACCESS_TOKEN`
-- `INSTAGRAM_ACCOUNT_ID` & `INSTAGRAM_ACCESS_TOKEN`
+Any Telegram user can connect their Facebook Page in 3 easy steps:
 
-### 2. WhatsApp Cloud API
-1. Open [Meta for Developers](https://developers.facebook.com/) -> Select your App.
-2. Under **WhatsApp** -> **API Setup**:
-   - Copy your **Phone number ID** into `WHATSAPP_PHONE_NUMBER_ID`.
-   - Copy your **Temporary / Permanent Access Token** into `WHATSAPP_ACCESS_TOKEN`.
+1. Send `/connect` to the bot on Telegram.
+2. The bot will prompt for your **Facebook Access Token** (Page Access Token or User Access Token).
+   - Get your token at: [Meta Graph API Explorer](https://developers.facebook.com/tools/explorer/)
+   - Permissions needed: `pages_manage_posts`, `pages_read_engagement`, `pages_show_list`, `pages_messaging`, `pages_read_user_content`.
+3. The bot validates the token against the Graph API in real time:
+   - If multiple pages are found, an inline menu appears to let you tap the page you want to manage.
+   - If one page is found, it is automatically bound and activated!
 
-### 3. Gmail (App Password - Zero Setup Hassle)
-1. Go to your [Google Account Security](https://myaccount.google.com/security).
-2. Enable **2-Step Verification** if not already enabled.
-3. Search for **App passwords** (or go to `myaccount.google.com/apppasswords`).
-4. Enter an app name (e.g. `SocialCommander`) and click **Create**.
-5. Copy the 16-character password into `.env`:
-   ```env
-   GMAIL_EMAIL=yourname@gmail.com
-   GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
-   ```
-
-### 4. Substack
-1. In `.env`, set your publication subdomain:
-   ```env
-   SUBSTACK_SUBDOMAIN=yourpublication
-   ```
-2. To allow the bot to create drafts and post notes:
-   - Open your Substack publication in Chrome/Edge.
-   - Press `F12` -> Go to **Application** tab -> **Cookies** -> `https://substack.com`.
-   - Copy the value of the `connect.sid` cookie into `.env`:
-     ```env
-     SUBSTACK_COOKIE_SID=s%3A...
-     ```
+To switch active pages later, simply type `/pages`.
 
 ---
 
 ## 💬 How To Interact via Telegram
 
-### Social Media Publishing
-- *"Waxaad Facebook iyo Instagram ku qortaa qoraal ku saabsan faa'iidooyinka AI iyo sida dhalinyarada Soomaaliyeed uga faa'iideysan karaan."*
-- Attach a photo and send: *"Publish this photo to Instagram and Facebook with an inspiring motivation caption."*
+### Facebook Page Management (English & Somali)
+- *"Waxaad Facebook ku qortaa qoraal soo jiidasho leh oo ku saabsan adeegyadayada cusub"*
+- *"Check my Facebook inbox messages and summarize what customers are asking"*
+- *"Reply to the message from Ahmed saying we can deliver the item by 3 PM"*
+- *"Publish a Facebook ad post for our 30% discount with a Shop Now button to https://example.com/shop"*
+- *"How did my last 5 Facebook posts perform? Show me likes, comments, and reach"*
+- *"Reply to the positive comments on my latest post with a thank you"*
 
-### Email Management
-- *"Check my unread emails from today."*
-- *"Send an email to john@example.com with subject 'Project Update' saying the initial deployment is finished."*
-- *"Draft an email to the scholarship board asking about application status."*
-
-### WhatsApp Messaging
-- *"Send a WhatsApp message to +252615000000 saying the meeting is confirmed for 4 PM."*
-
-### Substack Publishing
-- *"Draft a newsletter article for my Substack comparing deep learning models with code examples."*
-- *"Publish a Substack Note sharing my thought on autonomous AI agents."*
+### Photo & Creative Publishing
+- Attach any image in Telegram and write caption: *"Publish this photo to my Facebook Page with an inspiring quote"*
 
 ---
 
 ## 🛡️ Safety & Human-in-the-Loop Confirmation
-Every destructive or public action (publishing to Facebook/IG, sending an email, sending a WhatsApp message, or creating a Substack draft) triggers an **Interactive Telegram Preview**:
-- Tap `[🚀 Confirm & Publish]` to execute immediately.
-- Tap `[✏️ Revise / Edit]` to instruct the AI on changes.
-- Tap `[❌ Cancel]` to abort.
+
+Every write operation (publishing posts, launching ads, sending customer messages, replying to comments) triggers an interactive Telegram preview card:
+- **[🚀 Confirm & Send]**: Safely executes the action on Facebook using the user's specific page token.
+- **[❌ Cancel]**: Aborts the operation immediately.
+- **[✏️ Revise / Edit]**: Lets you adjust the prompt or message before publishing.

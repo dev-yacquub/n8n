@@ -1,17 +1,24 @@
 """
 AI Reasoning Brain.
 Processes user prompts using LLM Tool Calling (OpenRouter / Gemini).
-Coordinates between Read-Tools (instant response) and Write-Tools (staged for Telegram confirmation).
+Multi-tenant aware: dynamically binds the Telegram user's Facebook Page,
+coordinates between Read-Tools (instant response) and Write-Tools (staged for Telegram confirmation).
 """
 
+import os
 import json
+import logging
 import httpx
+import asyncio
 from typing import Dict, Any, List, Optional, Tuple
+
 from ..config.config import config
 from ..tools.registry import TOOLS_SCHEMA
 from .confirmation_mgr import confirmation_mgr, PendingAction
+from .user_db import user_db
 from ..connectors import (
     FacebookConnector,
+    get_facebook_connector_for_user,
     InstagramConnector,
     WhatsAppConnector,
     GmailConnector,
@@ -19,30 +26,33 @@ from ..connectors import (
     N8NBridge
 )
 
-import asyncio
+logger = logging.getLogger("SocialCommander.Brain")
 
-SYSTEM_PROMPT = """
-You are SocialCommander AI — an elite, personal AI executive assistant that manages the user's communications across:
-1. Facebook Pages
+SYSTEM_PROMPT_TEMPLATE = """
+You are SocialCommander AI — an elite, personal AI executive assistant managing the user's communications across:
+1. Facebook Pages (Full management, publishing, post metrics & insights, ads, inbox customer replies, and comment replies)
 2. Instagram Business
 3. WhatsApp (Personal Linked Device & Cloud API)
 4. Gmail (Read, Draft, Send)
 5. Substack Newsletters & Notes
 6. n8n Automation Engine
 
+Current Active Facebook Page:
+• Page Name: {page_name}
+• Page ID: {page_id}
+
 Key Guidelines:
 - You speak fluent English and Somali (Af-Soomaali). Always match the language the user speaks.
 - BE PROACTIVE, CREATIVE, AND ACTION-ORIENTED:
-  When the user asks you to post to Facebook, Instagram, cross-post, send an email, or send a WhatsApp message, DO NOT ask them what to write if you can create it.
-  Generate the complete, high-quality post/caption/email/message yourself and CALL THE CORRESPONDING TOOL IMMEDIATELY.
-  The tool call will automatically generate a confirmation preview card on Telegram with [Confirm], [Cancel], and [Revise] buttons so the user can verify before anything is published.
-- Quality standards:
-  - For Facebook/Instagram: Use catchy hooks, formatted line breaks, relevant emojis, and 5-10 high-value hashtags.
-  - For Gmail: Use clear, polite, and professional email structure.
-  - For WhatsApp: Keep it natural, direct, and concise.
-  - For Substack: Write thoughtful, engaging newsletter intros or well-crafted Substack Notes.
-- Always invoke the proper tool when the user intends to publish, draft, send, or check information.
-- When an attached media URL is present in the prompt, ALWAYS include it in your tool call parameters.
+  When the user asks you to:
+  1. Post to Facebook: Generate engaging copy with a catchy hook, line breaks, emojis, and hashtags, then CALL `post_to_facebook` immediately.
+  2. Publish an Ad: Generate compelling marketing ad copy with a clear value proposition, select the most relevant CTA button (e.g. LEARN_MORE, SHOP_NOW, SIGN_UP, CONTACT_US), and CALL `publish_facebook_ad_post` immediately.
+  3. Respond to Customer Messages: Check the inbox with `get_facebook_inbox` or draft a polite, helpful, and professional reply and CALL `reply_to_facebook_message`.
+  4. Collect Post Insights: Call `get_facebook_posts_and_insights` and summarize the performance clearly with tips on how to improve engagement.
+  5. Reply to Comments: Call `reply_to_facebook_comment` with a friendly and supportive answer.
+- Confirmation Safety:
+  Every publishing or sending action will automatically present a Telegram confirmation card with [Confirm], [Cancel], and [Revise] buttons, allowing the user to review before execution.
+- When attached media is provided in the prompt, ALWAYS include it in your tool call parameters.
 """
 
 
@@ -55,8 +65,7 @@ class AgentBrain:
         self.chat_histories: Dict[int, List[Dict[str, Any]]] = {}
         self._chat_locks: Dict[int, asyncio.Lock] = {}
 
-        # Direct connectors for read operations
-        self.fb = FacebookConnector()
+        # Default platform connectors
         self.ig = InstagramConnector()
         self.wa = WhatsAppConnector()
         self.gmail = GmailConnector()
@@ -68,20 +77,26 @@ class AgentBrain:
             self._chat_locks[chat_id] = asyncio.Lock()
         return self._chat_locks[chat_id]
 
+    def _build_system_prompt(self, chat_id: int) -> str:
+        creds = user_db.get_user_credentials(chat_id)
+        page_name = creds.get("page_name", "Not Connected") if creds else "Not Connected"
+        page_id = creds.get("page_id", "N/A") if creds else "N/A"
+        return SYSTEM_PROMPT_TEMPLATE.format(page_name=page_name, page_id=page_id)
+
     def get_history(self, chat_id: int) -> List[Dict[str, Any]]:
         if chat_id not in self.chat_histories:
             self.chat_histories[chat_id] = [
-                {"role": "system", "content": SYSTEM_PROMPT}
+                {"role": "system", "content": self._build_system_prompt(chat_id)}
             ]
         return self.chat_histories[chat_id]
 
     def reset_history(self, chat_id: int):
         self.chat_histories[chat_id] = [
-            {"role": "system", "content": SYSTEM_PROMPT}
+            {"role": "system", "content": self._build_system_prompt(chat_id)}
         ]
 
     async def _call_llm(self, messages: List[Dict[str, Any]], use_tools: bool = True) -> Dict[str, Any]:
-        """Calls OpenRouter or Gemini Chat Completion endpoint."""
+        """Calls OpenRouter or Gemini Chat Completion endpoint with exponential backoff."""
         url = "https://openrouter.ai/api/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.openrouter_key}",
@@ -136,12 +151,15 @@ class AgentBrain:
     ) -> Tuple[str, Optional[PendingAction]]:
         """
         Processes a user input message with AI tool calling.
-        Returns:
-            (reply_text, optional_pending_action)
+        Dynamically binds the user's Facebook Page.
         """
         lock = self._get_lock(chat_id)
         async with lock:
             history = self.get_history(chat_id)
+
+            # Update system prompt with active page
+            if history and history[0].get("role") == "system":
+                history[0]["content"] = self._build_system_prompt(chat_id)
 
             prompt = user_text
             if media_url:
@@ -149,19 +167,21 @@ class AgentBrain:
 
             history.append({"role": "user", "content": prompt})
 
+            # User-specific Facebook connector
+            fb = get_facebook_connector_for_user(chat_id)
+
             try:
                 response = await self._call_llm(history)
                 choice = response["choices"][0]
                 msg = choice.get("message", {})
 
-                # Check if LLM requested tool calling
                 tool_calls = msg.get("tool_calls", [])
                 if not tool_calls:
                     content = msg.get("content", "I am ready to assist you.")
                     history.append({"role": "assistant", "content": content})
                     return content, None
 
-                # Handle first tool call
+                # Handle tool call
                 tool_call = tool_calls[0]
                 func_name = tool_call["function"]["name"]
                 arguments_raw = tool_call["function"]["arguments"]
@@ -170,28 +190,99 @@ class AgentBrain:
                 except Exception:
                     args = {}
 
-                # Append assistant message with tool call to history
                 history.append(msg)
 
-                # --- READ ACTIONS (Executed instantly and fed back to LLM) ---
-                if func_name == "read_unread_emails":
+                # =========================================================================
+                # READ-ONLY ACTIONS (Executed instantly and fed back to LLM)
+                # =========================================================================
+                if func_name == "get_facebook_page_overview":
+                    res = await fb.get_page_overview()
+                    history.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.get("id", "call_fb_overview"),
+                        "name": func_name,
+                        "content": json.dumps(res.model_dump())
+                    })
+                    second_res = await self._call_llm(history, use_tools=False)
+                    final_content = second_res["choices"][0]["message"]["content"]
+                    history.append({"role": "assistant", "content": final_content})
+                    return final_content, None
+
+                elif func_name == "get_facebook_posts_and_insights":
+                    lim = args.get("limit", 5)
+                    res = await fb.get_posts_with_insights(limit=lim)
+                    history.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.get("id", "call_fb_insights"),
+                        "name": func_name,
+                        "content": json.dumps(res.model_dump())
+                    })
+                    second_res = await self._call_llm(history, use_tools=False)
+                    final_content = second_res["choices"][0]["message"]["content"]
+                    history.append({"role": "assistant", "content": final_content})
+                    return final_content, None
+
+                elif func_name == "get_facebook_inbox":
+                    lim = args.get("limit", 10)
+                    unread_only = args.get("unread_only", False)
+                    res = await fb.get_conversations(limit=lim, unread_only=unread_only)
+                    history.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.get("id", "call_fb_inbox"),
+                        "name": func_name,
+                        "content": json.dumps(res.model_dump())
+                    })
+                    second_res = await self._call_llm(history, use_tools=False)
+                    final_content = second_res["choices"][0]["message"]["content"]
+                    history.append({"role": "assistant", "content": final_content})
+                    return final_content, None
+
+                elif func_name == "get_conversation_messages":
+                    conv_id = args.get("conversation_id", "")
+                    lim = args.get("limit", 10)
+                    res = await fb.get_conversation_messages(conversation_id=conv_id, limit=lim)
+                    history.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.get("id", "call_fb_msgs"),
+                        "name": func_name,
+                        "content": json.dumps(res.model_dump())
+                    })
+                    second_res = await self._call_llm(history, use_tools=False)
+                    final_content = second_res["choices"][0]["message"]["content"]
+                    history.append({"role": "assistant", "content": final_content})
+                    return final_content, None
+
+                elif func_name == "get_facebook_post_comments":
+                    post_id = args.get("post_id", "")
+                    lim = args.get("limit", 20)
+                    res = await fb.get_post_comments(post_id=post_id, limit=lim)
+                    history.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.get("id", "call_fb_comments"),
+                        "name": func_name,
+                        "content": json.dumps(res.model_dump())
+                    })
+                    second_res = await self._call_llm(history, use_tools=False)
+                    final_content = second_res["choices"][0]["message"]["content"]
+                    history.append({"role": "assistant", "content": final_content})
+                    return final_content, None
+
+                elif func_name == "read_unread_emails":
                     max_res = args.get("max_results", 5)
                     res = await self.gmail.list_unread(max_res)
-                    tool_output = json.dumps(res.model_dump())
                     history.append({
                         "role": "tool",
                         "tool_call_id": tool_call.get("id", "call_gmail"),
                         "name": func_name,
-                        "content": tool_output
+                        "content": json.dumps(res.model_dump())
                     })
-                    # Re-prompt LLM for summary
                     second_res = await self._call_llm(history, use_tools=False)
                     final_content = second_res["choices"][0]["message"]["content"]
                     history.append({"role": "assistant", "content": final_content})
                     return final_content, None
 
                 elif func_name == "get_social_overview":
-                    fb_res = await self.fb.get_recent_posts(3) if self.fb.is_configured() else None
+                    fb_res = await fb.get_recent_posts(3) if fb.is_configured() else None
                     ig_res = await self.ig.get_recent_media(3) if self.ig.is_configured() else None
                     sub_res = await self.substack.get_recent_posts(3) if self.substack.is_configured() else None
                     n8n_res = await self.n8n.list_workflows() if self.n8n.is_configured() else None
@@ -213,7 +304,9 @@ class AgentBrain:
                     history.append({"role": "assistant", "content": final_content})
                     return final_content, None
 
-                # --- WRITE ACTIONS (Require Telegram User Confirmation) ---
+                # =========================================================================
+                # WRITE ACTIONS (Require Telegram Confirmation, Attached with telegram_id)
+                # =========================================================================
                 target_media = (media_path if media_path and os.path.exists(media_path) else None) or media_url or args.get("image_url")
 
                 if func_name == "post_to_facebook":
@@ -223,7 +316,7 @@ class AgentBrain:
                         f"📢 *Preview: Facebook Page Post*\n\n"
                         f"{msg_content}\n\n"
                         f"🖼 *Image Attached:* {'Yes' if has_media else 'No (Text-only)'}\n\n"
-                        f"_Tap below to confirm or revise._"
+                        f"_Tap below to confirm and publish._"
                     )
                     action_type = "post_photo" if has_media else "post_text"
                     pending = confirmation_mgr.create_pending_action(
@@ -232,7 +325,88 @@ class AgentBrain:
                         payload={"message": msg_content, "caption": msg_content, "image_url": target_media, "media_path": media_path},
                         preview_text=preview,
                         media_url=target_media,
-                        media_path=media_path
+                        media_path=media_path,
+                        telegram_id=chat_id
+                    )
+                    return preview, pending
+
+                elif func_name == "publish_facebook_ad_post":
+                    msg_content = args.get("message", "")
+                    link = args.get("link", "")
+                    cta = args.get("cta_type", "LEARN_MORE").upper()
+                    preview = (
+                        f"🚀 *Preview: Facebook Call-To-Action Ad Post*\n\n"
+                        f"📝 *Ad Copy:*\n{msg_content}\n\n"
+                        f"🔗 *Destination Link:* {link}\n"
+                        f"🔘 *Action Button:* `[{cta}]`\n"
+                        f"🖼 *Image:* {'Attached' if target_media else 'Default Preview'}\n\n"
+                        f"_Confirm to publish this ad post to your page feed._"
+                    )
+                    pending = confirmation_mgr.create_pending_action(
+                        platform="facebook",
+                        action_type="publish_cta_ad_post",
+                        payload={"message": msg_content, "link": link, "cta_type": cta, "image_url": target_media},
+                        preview_text=preview,
+                        media_url=target_media,
+                        telegram_id=chat_id
+                    )
+                    return preview, pending
+
+                elif func_name == "create_facebook_ad_campaign":
+                    c_name = args.get("name", "New Ad Campaign")
+                    obj = args.get("objective", "OUTCOME_TRAFFIC")
+                    budget = args.get("daily_budget")
+                    budget_str = f"${budget}/day" if budget else "Default"
+                    preview = (
+                        f"📢 *Preview: Meta Ads Marketing Campaign*\n\n"
+                        f"🏷 *Campaign Name:* {c_name}\n"
+                        f"🎯 *Objective:* `{obj}`\n"
+                        f"💰 *Budget:* {budget_str}\n"
+                        f"⚙️ *Initial Status:* `PAUSED` (Safe draft)\n\n"
+                        f"_Confirm to create this campaign in your Ad Account._"
+                    )
+                    pending = confirmation_mgr.create_pending_action(
+                        platform="facebook",
+                        action_type="create_ad_campaign",
+                        payload={"name": c_name, "objective": obj, "daily_budget": budget},
+                        preview_text=preview,
+                        telegram_id=chat_id
+                    )
+                    return preview, pending
+
+                elif func_name == "reply_to_facebook_message":
+                    conv_id = args.get("conversation_id", "")
+                    reply_text = args.get("message", "")
+                    preview = (
+                        f"💬 *Preview: Facebook Customer Message Reply*\n\n"
+                        f"🆔 *Conversation Thread:* `{conv_id}`\n"
+                        f"📝 *Your Reply:*\n\"{reply_text}\"\n\n"
+                        f"_Ready to deliver to the customer. Confirm below:_"
+                    )
+                    pending = confirmation_mgr.create_pending_action(
+                        platform="facebook",
+                        action_type="send_inbox_reply",
+                        payload={"conversation_id": conv_id, "message": reply_text},
+                        preview_text=preview,
+                        telegram_id=chat_id
+                    )
+                    return preview, pending
+
+                elif func_name == "reply_to_facebook_comment":
+                    comment_id = args.get("comment_id", "")
+                    reply_text = args.get("message", "")
+                    preview = (
+                        f"💬 *Preview: Reply to Facebook Comment*\n\n"
+                        f"🆔 *Comment ID:* `{comment_id}`\n"
+                        f"📝 *Your Response:*\n\"{reply_text}\"\n\n"
+                        f"_Publish this reply to the comment thread?_"
+                    )
+                    pending = confirmation_mgr.create_pending_action(
+                        platform="facebook",
+                        action_type="reply_to_comment",
+                        payload={"comment_id": comment_id, "message": reply_text},
+                        preview_text=preview,
+                        telegram_id=chat_id
                     )
                     return preview, pending
 
@@ -250,7 +424,8 @@ class AgentBrain:
                         payload={"caption": caption, "image_url": target_media, "media_path": media_path},
                         preview_text=preview,
                         media_url=target_media,
-                        media_path=media_path
+                        media_path=media_path,
+                        telegram_id=chat_id
                     )
                     return preview, pending
 
@@ -268,7 +443,8 @@ class AgentBrain:
                         payload={"caption": caption, "message": caption, "image_url": target_media, "media_path": media_path, "cross_post_ig": True},
                         preview_text=preview,
                         media_url=target_media,
-                        media_path=media_path
+                        media_path=media_path,
+                        telegram_id=chat_id
                     )
                     return preview, pending
 
@@ -285,7 +461,8 @@ class AgentBrain:
                         platform="whatsapp",
                         action_type="send_message",
                         payload={"recipient": recipient, "message": body},
-                        preview_text=preview
+                        preview_text=preview,
+                        telegram_id=chat_id
                     )
                     return preview, pending
 
@@ -304,7 +481,8 @@ class AgentBrain:
                         platform="gmail",
                         action_type="send_email",
                         payload={"to": to_addr, "subject": subj, "body": body},
-                        preview_text=preview
+                        preview_text=preview,
+                        telegram_id=chat_id
                     )
                     return preview, pending
 
@@ -323,7 +501,8 @@ class AgentBrain:
                         platform="gmail",
                         action_type="create_draft",
                         payload={"to": to_addr, "subject": subj, "body": body},
-                        preview_text=preview
+                        preview_text=preview,
+                        telegram_id=chat_id
                     )
                     return preview, pending
 
@@ -342,7 +521,8 @@ class AgentBrain:
                         platform="substack",
                         action_type="create_draft",
                         payload={"title": title, "subtitle": subtitle, "body": body},
-                        preview_text=preview
+                        preview_text=preview,
+                        telegram_id=chat_id
                     )
                     return preview, pending
 
@@ -357,7 +537,8 @@ class AgentBrain:
                         platform="substack",
                         action_type="post_note",
                         payload={"content": content},
-                        preview_text=preview
+                        preview_text=preview,
+                        telegram_id=chat_id
                     )
                     return preview, pending
 
@@ -374,14 +555,15 @@ class AgentBrain:
                         platform="n8n",
                         action_type="trigger_webhook",
                         payload={"webhook": wf_target, "data": data_param},
-                        preview_text=preview
+                        preview_text=preview,
+                        telegram_id=chat_id
                     )
                     return preview, pending
 
-                # Fallback
                 return f"Action `{func_name}` requested with parameters: {json.dumps(args)}", None
 
             except Exception as e:
+                logger.error(f"Error in AI Brain: {e}", exc_info=True)
                 return f"⚠️ Error in AI Brain processing: {str(e)}", None
 
 

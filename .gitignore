@@ -4,6 +4,10 @@ n8n_config.json
 *.key
 *.pem
 credentials*.json
+*.db
+ai_social_agent/data/*.db
+ai_social_agent/uploads/*
+!ai_social_agent/uploads/.gitkeep
 
 # Backups & Executions
 backups/

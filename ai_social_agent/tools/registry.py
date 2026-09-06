@@ -1,16 +1,29 @@
 """
 Tool Registry defining function definitions and schemas for LLM tool calling.
 Follows OpenAI / Gemini compatible tool format.
+Includes complete Facebook Page Management, Messaging, Comments, Insights, and Advertising tools.
 """
 
 from typing import List, Dict, Any
 
 TOOLS_SCHEMA: List[Dict[str, Any]] = [
+    # --- FACEBOOK PAGE MANAGEMENT & PUBLISHING ---
+    {
+        "type": "function",
+        "function": {
+            "name": "get_facebook_page_overview",
+            "description": "Get current Facebook Page profile, follower count, category, rating, and status.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
     {
         "type": "function",
         "function": {
             "name": "post_to_facebook",
-            "description": "Publish a text post or photo post to your Facebook Page.",
+            "description": "Publish a text post or photo post to your Facebook Page feed.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -20,13 +33,191 @@ TOOLS_SCHEMA: List[Dict[str, Any]] = [
                     },
                     "image_url": {
                         "type": "string",
-                        "description": "Optional public URL of the image to post."
+                        "description": "Optional public URL or file path of the image to post."
                     }
                 },
                 "required": ["message"]
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "publish_facebook_ad_post",
+            "description": "Publish a high-converting sponsored or action-driven ad post with a Call-To-Action (CTA) button (e.g. LEARN_MORE, SHOP_NOW, SIGN_UP, CONTACT_US) and destination link on your Facebook Page.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "description": "Engaging marketing copy and ad text with emojis and hook."
+                    },
+                    "link": {
+                        "type": "string",
+                        "description": "Destination landing page, website URL, or WhatsApp link."
+                    },
+                    "cta_type": {
+                        "type": "string",
+                        "enum": ["LEARN_MORE", "SHOP_NOW", "SIGN_UP", "CONTACT_US", "BOOK_TRAVEL", "GET_QUOTE", "APPLY_NOW", "SUBSCRIBE"],
+                        "description": "The action button displayed on the post. Default is LEARN_MORE."
+                    },
+                    "image_url": {
+                        "type": "string",
+                        "description": "Optional image URL for the ad post."
+                    }
+                },
+                "required": ["message", "link"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_facebook_ad_campaign",
+            "description": "Create a new Ad Campaign in the user's Meta Ad Account via Marketing API.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Name of the ad campaign."
+                    },
+                    "objective": {
+                        "type": "string",
+                        "enum": ["OUTCOME_TRAFFIC", "OUTCOME_ENGAGEMENT", "OUTCOME_LEADS", "OUTCOME_SALES"],
+                        "description": "Campaign objective. Default is OUTCOME_TRAFFIC."
+                    },
+                    "daily_budget": {
+                        "type": "integer",
+                        "description": "Daily budget in USD (e.g. 10 for $10/day)."
+                    }
+                },
+                "required": ["name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_facebook_posts_and_insights",
+            "description": "Fetch recent Facebook Page posts with likes, comments, shares, and engagement performance metrics.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of recent posts to retrieve (default 5)."
+                    }
+                }
+            }
+        }
+    },
+    # --- FACEBOOK MESSAGING & COMMENTS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "get_facebook_inbox",
+            "description": "Fetch customer Messenger conversations from the Facebook Page Inbox, showing customer names, message previews, and unread statuses.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of conversation threads to fetch (default 10)."
+                    },
+                    "unread_only": {
+                        "type": "boolean",
+                        "description": "Filter for unread conversations only."
+                    }
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_conversation_messages",
+            "description": "Fetch message history from a specific customer conversation thread in Facebook Inbox.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "conversation_id": {
+                        "type": "string",
+                        "description": "The conversation thread ID (from get_facebook_inbox)."
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of messages to retrieve (default 10)."
+                    }
+                },
+                "required": ["conversation_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reply_to_facebook_message",
+            "description": "Send a reply to a customer in their Facebook Messenger conversation thread.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "conversation_id": {
+                        "type": "string",
+                        "description": "The conversation thread ID to reply to."
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "The message text to send to the customer."
+                    }
+                },
+                "required": ["conversation_id", "message"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_facebook_post_comments",
+            "description": "Fetch comments on a specific Facebook post to see customer inquiries, praise, or questions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "post_id": {
+                        "type": "string",
+                        "description": "The Facebook Post ID."
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of comments to fetch (default 20)."
+                    }
+                },
+                "required": ["post_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reply_to_facebook_comment",
+            "description": "Reply directly to a user's comment on a Facebook post.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "comment_id": {
+                        "type": "string",
+                        "description": "The comment ID to reply to."
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "The reply message text."
+                    }
+                },
+                "required": ["comment_id", "message"]
+            }
+        }
+    },
+    # --- INSTAGRAM & CROSS POSTING ---
     {
         "type": "function",
         "function": {
@@ -69,6 +260,7 @@ TOOLS_SCHEMA: List[Dict[str, Any]] = [
             }
         }
     },
+    # --- WHATSAPP ---
     {
         "type": "function",
         "function": {
@@ -94,6 +286,7 @@ TOOLS_SCHEMA: List[Dict[str, Any]] = [
             }
         }
     },
+    # --- GMAIL ---
     {
         "type": "function",
         "function": {
@@ -160,6 +353,7 @@ TOOLS_SCHEMA: List[Dict[str, Any]] = [
             }
         }
     },
+    # --- SUBSTACK ---
     {
         "type": "function",
         "function": {
@@ -202,6 +396,7 @@ TOOLS_SCHEMA: List[Dict[str, Any]] = [
             }
         }
     },
+    # --- GENERAL SOCIAL OVERVIEW & N8N ---
     {
         "type": "function",
         "function": {
