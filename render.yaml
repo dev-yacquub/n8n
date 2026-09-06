@@ -20,13 +20,21 @@ services:
       - key: GENERIC_TIMEZONE
         value: UTC
       - key: NODE_OPTIONS
-        value: "--max-old-space-size=320"
+        value: "--max-old-space-size=220"
       - key: N8N_RUNNERS_ENABLED
         value: "false"
       - key: N8N_VERSION_NOTIFICATIONS_ENABLED
         value: "false"
       - key: N8N_DIAGNOSTICS_ENABLED
         value: "false"
+      - key: N8N_TEMPLATES_ENABLED
+        value: "false"
+      - key: N8N_HIRING_BANNER_ENABLED
+        value: "false"
+      - key: N8N_PERSONALIZATION_ENABLED
+        value: "false"
+      - key: N8N_CONCURRENCY_PRODUCTION_LIMIT
+        value: "1"
       - key: WEBHOOK_URL
         value: https://n8n-5yi2.onrender.com/
       - key: N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS
@@ -48,64 +56,19 @@ services:
       - key: DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED
         value: "false"
       - key: DB_POSTGRESDB_POOL_SIZE
-        value: "10"
+        value: "2"
       - key: DB_POSTGRESDB_CONNECTION_TIMEOUT
         value: "60000"
+      - key: EXECUTIONS_DATA_SAVE_ON_SUCCESS
+        value: "none"
+      - key: EXECUTIONS_DATA_SAVE_ON_ERROR
+        value: "all"
+      - key: EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS
+        value: "false"
       - key: EXECUTIONS_DATA_PRUNE
         value: "true"
       - key: EXECUTIONS_DATA_MAX_AGE
-        value: "168"
+        value: "24"
       - key: EXECUTIONS_DATA_PRUNE_MAX_COUNT
-        value: "10000"
-
-  - type: web
-    name: social-commander-agent
-    runtime: python
-    plan: free
-    region: oregon
-    buildCommand: "bash ai_social_agent/render_build.sh"
-    startCommand: "bash ai_social_agent/render_start.sh"
-    envVars:
-      - key: TELEGRAM_BOT_TOKEN
-        sync: false
-      - key: TELEGRAM_ALLOWED_USER_ID
-        sync: false
-      - key: LLM_PROVIDER
-        value: openrouter
-      - key: OPENROUTER_API_KEY
-        sync: false
-      - key: LLM_MODEL
-        value: google/gemini-2.5-flash
-      - key: FACEBOOK_PAGE_ID
-        value: "106972352162498"
-      - key: FACEBOOK_ACCESS_TOKEN
-        sync: false
-      - key: FACEBOOK_API_VERSION
-        value: v19.0
-      - key: INSTAGRAM_ACCOUNT_ID
-        value: "17841457143655029"
-      - key: INSTAGRAM_ACCESS_TOKEN
-        sync: false
-      - key: INSTAGRAM_API_VERSION
-        value: v19.0
-      - key: WHATSAPP_MODE
-        value: linked_device
-      - key: WHATSAPP_BRIDGE_URL
-        value: http://127.0.0.1:3001
-      - key: WHATSAPP_PHONE_NUMBER_ID
-        value: "1263547403515916"
-      - key: WHATSAPP_ACCESS_TOKEN
-        sync: false
-      - key: WHATSAPP_API_VERSION
-        value: v20.0
-      - key: WHATSAPP_RECIPIENT_PHONE
-        value: "252637452784"
-      - key: GMAIL_EMAIL
-        value: yacquubqaxwe@gmail.com
-      - key: GMAIL_APP_PASSWORD
-        sync: false
-      - key: N8N_BASE_URL
-        value: https://n8n-5yi2.onrender.com/api/v1
-      - key: N8N_API_KEY
-        sync: false
+        value: "500"
 

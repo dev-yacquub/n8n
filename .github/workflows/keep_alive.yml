@@ -10,8 +10,8 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping SocialCommander Render Service
+      - name: Ping n8n Render Service
         run: |
-          echo "Pinging https://yacquub-social-commander-agent.onrender.com/ ..."
-          response=$(curl -s -o /dev/null -w "%{http_code}" -m 60 https://yacquub-social-commander-agent.onrender.com/)
+          echo "Pinging https://n8n-5yi2.onrender.com/healthz ..."
+          response=$(curl -s -o /dev/null -w "%{http_code}" -m 60 https://n8n-5yi2.onrender.com/healthz)
           echo "HTTP Response Code: $response"

@@ -20,13 +20,21 @@ services:
       - key: GENERIC_TIMEZONE
         value: UTC
       - key: NODE_OPTIONS
-        value: "--max-old-space-size=320"
+        value: "--max-old-space-size=220"
       - key: N8N_RUNNERS_ENABLED
         value: "false"
       - key: N8N_VERSION_NOTIFICATIONS_ENABLED
         value: "false"
       - key: N8N_DIAGNOSTICS_ENABLED
         value: "false"
+      - key: N8N_TEMPLATES_ENABLED
+        value: "false"
+      - key: N8N_HIRING_BANNER_ENABLED
+        value: "false"
+      - key: N8N_PERSONALIZATION_ENABLED
+        value: "false"
+      - key: N8N_CONCURRENCY_PRODUCTION_LIMIT
+        value: "1"
       - key: WEBHOOK_URL
         value: https://n8n-5yi2.onrender.com/
       - key: N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS
@@ -48,12 +56,18 @@ services:
       - key: DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED
         value: "false"
       - key: DB_POSTGRESDB_POOL_SIZE
-        value: "10"
+        value: "2"
       - key: DB_POSTGRESDB_CONNECTION_TIMEOUT
         value: "60000"
+      - key: EXECUTIONS_DATA_SAVE_ON_SUCCESS
+        value: "none"
+      - key: EXECUTIONS_DATA_SAVE_ON_ERROR
+        value: "all"
+      - key: EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS
+        value: "false"
       - key: EXECUTIONS_DATA_PRUNE
         value: "true"
       - key: EXECUTIONS_DATA_MAX_AGE
-        value: "168"
+        value: "24"
       - key: EXECUTIONS_DATA_PRUNE_MAX_COUNT
-        value: "10000"
+        value: "500"
